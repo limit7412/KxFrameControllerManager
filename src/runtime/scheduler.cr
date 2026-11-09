@@ -13,6 +13,10 @@ module Runtime
     # 長押しの判定や省電力が、デバイスの接続と切断を知るために使う。
     property on_events : Proc(Array(SteamVR::Event), Nil) = ->(_events : Array(SteamVR::Event)) { }
 
+    # SteamVR につながっている間、イベントを読んだ後に毎拍呼ぶ。
+    # 長押しの判定と省電力の判定がここで走る。
+    property on_tick : Proc(Time::Instant, Nil) = ->(_now : Time::Instant) { }
+
     # SteamVR が動いていない間に、OpenVR の初期化をやり直す間隔。
     property retry_interval : Time::Span
 
@@ -38,6 +42,9 @@ module Runtime
         @errors.guard("error.steamvr_poll") do
           events = @steamvr.poll
           @on_events.call(events) unless events.empty?
+        end
+        if @steamvr.connected?
+          @errors.guard("error.tick") { @on_tick.call(now) }
         end
         # 閉じた直後にすぐ開き直さない。SteamVR が終わりかけている間に初期化を繰り返すと、
         # 終了の邪魔になる。次の試行は 1 間隔の後にする。

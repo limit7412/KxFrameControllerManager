@@ -8,9 +8,15 @@ KxFrameControllerManager は、Steam Frame のヘッドセット上で常駐し�
 
 ## 状態
 
-いま入っているのは基盤だけである。
-常駐して SteamVR へつなぎ、SteamVR の起動と終了に追従するところまでが動く。
-長押しの検出、ヘッドセット内の SteamVR ウェブサーバー（`127.0.0.1:27062`）への切断要求、省電力、CLI の残りのコマンド、systemd のユニットは、これから足す。
+仕様書 v1 の機能はひととおり入っている。
+
+- SteamVR Input のアクションとして長押しを読み、ヘッドセット内の SteamVR ウェブサーバー（`127.0.0.1:27062`）へ切断要求を送る。既定の割り当ては、左が View、右が Menu の長押しである
+- `status`、`list`、`disconnect` で疎通と照合を確かめ、長押しを経ずに切断できる
+- systemd のユーザーユニットで常駐する
+- 両方が切れている間の省電力は入っているが、実機での確認（仕様書 7.2 節）が済むまで既定で無効にしてある
+
+実機で確かめたのは、27062 への切断要求でコントローラーが切れることまでである（2026-11-09）。
+Background アプリから SteamVR Input が読めるか、振動が出るかは、まだ確かめていない。
 
 ## 動作要件
 
@@ -25,8 +31,10 @@ KxFrameControllerManager は、Steam Frame のヘッドセット上で常駐し�
 | --- | --- |
 | 実行ファイル | `~/.local/bin/kx-frame-controller-manager` |
 | 設定 | `~/.config/KxFrameControllerManager/config.json` |
-| vrmanifest | `~/.local/share/KxFrameControllerManager/` |
+| vrmanifest とアクションマニフェスト | `~/.local/share/KxFrameControllerManager/` |
 | ログ | `~/.local/state/KxFrameControllerManager/logs/` |
+| 省電力で変える前の値 | `~/.local/state/KxFrameControllerManager/power_save.json` |
+| systemd のユニット | `~/.config/systemd/user/kx-frame-controller-manager.service` |
 
 ## ドキュメント
 
@@ -34,6 +42,7 @@ KxFrameControllerManager は、Steam Frame のヘッドセット上で常駐し�
 - [設定リファレンス](docs/configuration.md)
 - [設計](docs/architecture.md)
 - [開発ガイド](docs/development.md)
+- [27062 のメッセージ](docs/protocol-27062.md)
 
 ## ライセンス
 

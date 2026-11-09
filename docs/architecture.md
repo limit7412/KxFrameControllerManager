@@ -12,51 +12,58 @@
 
 ## ディレクトリ構成
 
-いま入っているのは基盤だけである。印の付いたものは、これから足す。
-
 ```
 src/
-  main.cr                          composition root（組み立て、依存注入、コマンドの解釈、主ループ）
-  power_off/                     ＊ 中立ドメイン。長押しの状態機械、対象の決定、切断の実行と確認
-  power_save/                    ＊ 両方が切れている間の省電力
-  frame_link/                    ＊ 27062 の WebSocket 接続、種別 44/45 の符号化と復号
+  main.cr                          composition root（組み立て、依存注入、コマンドの実行、主ループ）
+  power_off/                       中立ドメイン
+    models.cr                        手、27062 の一覧、切断の対象と結末、シリアルの変換
+    hold_detector.cr                 片手ぶんの長押しの状態機械
+    repository.cr                    入力、振動、デバイス、切断要求の抽象
+    usecase.cr                       長押しの判定、対象の決定と照合、切断の実行と確認
+  power_save/                      両方が切れている間の省電力
+    models.cr                        変えるキー、読んだ値、戻すための記録
+    repository.cr                    設定値と記録ファイルの抽象、記録ファイルの実装
+    usecase.cr                       入る、戻る、戻し忘れの回復
+  frame_link/                      27062 との通信
+    codec.cr                         メッセージの符号化と復号
+    websocket_repository.cr          要求ごとに張る WebSocket
   steamvr/                         SteamVR 連携
-    ffi.cr                           openvr_api の定数と FnTable
+    ffi.cr                           openvr_api の定数、構造体、FnTable
     repository.cr                    OpenVR 呼び出しと vrmanifest 書き出しの抽象、イベントの型
     openvr_repository.cr             libopenvr_api.so を dlopen する実装
-    usecase.cr                       接続、vrmanifest の生成と登録、イベントの受け取り
-    input_repository.cr            ＊ IVRInput による入力と振動
-    settings_repository.cr         ＊ IVRSettings による設定値の読み書き
+    usecase.cr                       接続、vrmanifest とアクションマニフェストの書き出しと登録、イベントの受け取り
+    input_repository.cr              IVRInput による入力と振動
+    device_repository.cr             コントローラーの左右、接続、シリアル
+    settings_repository.cr           IVRSettings による設定値の読み書き
   config/                          設定
-    models.cr                        設定スキーマ
-    repository.cr                    設定ファイルの読み書き
-    usecase.cr                       検証、保存、再読み込み、反映
   update/                          更新
-    models.cr                        版、リリース、アセット
-    repository.cr                    GitHub Releases の取得とアセットの照合
-    usecase.cr                       新しい版の判定
-    installer.cr                     取得と置き換え
   runtime/                         実行環境
-    paths.cr                         設定、ログ、vrmanifest の置き場所
+    paths.cr                         設定、ログ、マニフェスト、ユニットの置き場所
     logging.cr                       日次ローテーションのログと標準エラーへの出力
     i18n.cr                          表示する文字列の辞書
     scheduler.cr                     主ループの 1 拍で何を呼ぶか
-    cli.cr                         ＊ コマンドの解釈
-    systemd.cr                     ＊ ユニットの書き出しと systemctl --user の呼び出し
+    cli.cr                           コマンドの解釈
+    systemd.cr                       ユニットの書き出しと systemctl --user の呼び出し
   error/
     usecase.cr                       例外のログ記録
+actions/                           SteamVR Input のアクションマニフェストと frame_controller の既定バインド
+packaging/                         systemd ユーザーユニットの雛形と install.sh
 locales/                           ja.json / en.json
 spec/                              単体テスト。support/fakes.cr が外部境界を差し替える
 scripts/                           build.sh / verify.sh / package.sh
 .github/                           workflows と actions/build-linux-aarch64
 ```
 
+`actions/` と `packaging/` のユニットの雛形は、コンパイル時に実行ファイルへ埋め込む。
+配布物の実行ファイルは単体でも `install` でき、SteamVR へつながるたびにアクションマニフェストを書き出す。
+
 ## 依存の向き
 
 依存の向きは次のとおり固定する。
 
 - `power_off` は他のどのコンテキストにも依存しない。ただし設定の型（`config/models`）だけは参照する。
-- `steamvr` は `power_off` の `InputRepository` と `DeviceRepository` を、`frame_link` は `DisconnectRepository` を継承して実装する。
+- `power_save` は `power_off` の `DisconnectRepository` を使う。入る直前に 27062 の一覧を確かめるためである。
+- `steamvr` は `power_off` の `InputRepository`、`HapticRepository`、`DeviceRepository` と、`power_save` の `SettingsRepository` を、`frame_link` は `DisconnectRepository` を継承して実装する。
 - `runtime` は usecase を呼ぶだけで、ロジックを持たない。
 - FFI の宣言はコンテキスト内の `ffi.cr` に隔離し、同じコンテキストの repository だけが参照する。
 
@@ -70,10 +77,19 @@ scripts/                           build.sh / verify.sh / package.sh
 ```
 loop do
   SIGHUP を受けていれば設定を読み直す
-  つながっていれば OpenVR のイベントを読む。つながっていなければ間隔を空けて接続を試す
+  つながっていれば
+    OpenVR のイベントを読む（切断の確認に使う）
+    接続の後の最初の拍なら、27062 の疎通を別のファイバで確かめる
+    長押しの判定（UpdateActionState と GetDigitalActionData）
+    省電力の判定（左右がつながっているか）
+  つながっていなければ間隔を空けて接続を試す
   input.poll_interval_ms（既定 20 ミリ秒）眠る
 end
 ```
+
+切断を決めたら、要求と確認は別のファイバで行う。
+確認は最長で `confirm_timeout_ms` の 2 倍待つため、主ループで待つと長押しの判定が止まる。
+切断を処理している間は、次の切断を始めない。
 
 処理して短く `sleep` する形は KxNotifyUtils と同じである。
 Crystal のファイバは協調的にしか切り替わらず、`sleep` で制御を返さないと、切断要求や更新の確認を待つファイバが進まない。
@@ -86,6 +102,7 @@ KxNotifyUtils と違い、SteamVR の終了でプロセスは終わらない（�
 
 SIGTERM と SIGINT で終わり、SIGHUP で設定を読み直す。
 ハンドラは印を立てるだけで、処理は主ループが行う。
+終わる前と、SteamVR の終了を受けて OpenVR を閉じる前に、省電力で変えた値を戻す。
 
 ## 設定の反映
 
@@ -99,9 +116,12 @@ SIGTERM と SIGINT で終わり、SIGHUP で設定を読み直す。
 SteamVR が動いていないときに SteamVR を起こさず、初期化のほうを失敗させる種別はこれだけである。
 SteamVR が動いていないことは `VRInitError_Init_NoServerForBackgroundApp` という初期化の失敗として表れるので、この番号だけは異常として扱わず、ログも `debug` に留める。
 
-インターフェースは `IVRSystem_026` と `IVRApplications_008` に固定し、初期化のたびに `VR_IsInterfaceVersionValid` で確かめる。
-`IVRInput` と `IVRSettings` は、それを使う機能と一緒に足す。
-版はヘッドセットの `openvr_capi.h` から決める（仕様書 5.2 節）。
+インターフェースは `IVRSystem_026`、`IVRApplications_008`、`IVRInput_011`、`IVRSettings_003` に固定し、初期化のたびに `VR_IsInterfaceVersionValid` で確かめる。
+前の 2 つが通らなければ SteamVR 連携を無効にする。
+後の 2 つが通らなければ、それを使う機能（長押しの検出、省電力）だけを止め、接続は保つ。
+
+アクションのハンドルは、SteamVR へつながるたびに取り直す。
+`Repository#generation` が開き直すたびに進み、入力の側はこの番号の変化を見る。
 
 vrmanifest は接続のたびに書き出し直して登録する。
 目的は SteamVR のコントローラーバインド画面に本ツールを出すことであり、自動起動には使わない。
@@ -117,4 +137,8 @@ vrmanifest は接続のたびに書き出し直して登録する。
 - **更新の置き換え**：Linux では走っている実行ファイルの上へリネームで重ねられる。KxNotifyUtils の Windows 版にあった `.old` への退避と巻き戻しは無くした。
 - **プレリリースの起点**：KxNotifyUtils は安定版のタグが無いとプレリリースを作れなかった。こちらは最初の安定版を出す前から試せるよう、タグが無ければ 0.0.0 を起点にして `0.0.1-testN` を作る。
 - **エラーの知らせ方**：トレイが無いため、`Error::Usecase` はログへ残すだけにした。systemd 下ではログが標準エラーにも出るため、`journalctl --user` でも読める。
+- **IVRInput と IVRSettings の版**：仕様書はヘッドセットの `openvr_capi.h` から決めるとしていたが、まだ読めていない。OpenVR SDK の master の `openvr_capi.h` と同じ版にし、初期化のたびに `VR_IsInterfaceVersionValid` で確かめる。通らなければその機能だけを止める。
+- **既定バインドの controller_type**：Steam Frame のコントローラーは `frame_controller` である。SteamVR のドライバの入力プロファイル（`drivers/frame_controller/resources/input/frame_controller_profile.json`）に、左の `/input/view` と右の `/input/menu` がある。
+- **CLI が SteamVR につながらないときの disconnect**：`left` と `right` は 27062 の一覧が報告する左右だけで決める（仕様書 4.3 節）。どちらの手か 1 台に決まらなければ切らない。
+- **未設定のキーの判定**：IVRSettings は、既定値を持つキーなら未設定でも既定値を返す。未設定と分かるのは、既定値も無いキー（`UnsetSettingHasNoDefault`）だけである。`analogGain` が既定値を持つ場合、戻すときは消さずに読んだ既定値を書く。実機の振る舞いは 7.2 節の確認で見る。
 - **言語の決め方**：`language` が `auto` のときは、環境変数 `LC_ALL`、`LC_MESSAGES`、`LANG` の順に見る。Windows の表示言語に当たるものが無いためである。

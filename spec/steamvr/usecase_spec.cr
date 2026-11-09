@@ -144,3 +144,26 @@ describe SteamVR::Usecase do
     end
   end
 end
+
+describe "SteamVR::Usecase のアクションマニフェストと終了前の処理" do
+  it "つながるたびにアクションマニフェストも書き出す" do
+    usecase, _, store = build("/home/deck/actions/actions.json")
+    usecase.action_files = {"/home/deck/actions/actions.json" => "{}", "/home/deck/actions/bindings.json" => "{}"}
+    usecase.connect
+
+    store.exists?("/home/deck/actions/actions.json").should be_true
+    store.exists?("/home/deck/actions/bindings.json").should be_true
+  end
+
+  it "SteamVR の終了を受けたら、閉じる前に before_close を呼ぶ" do
+    usecase, repository, _ = build
+    order = [] of String
+    usecase.before_close = -> { order << (repository.opened? ? "open" : "closed"); nil }
+    usecase.connect
+    repository.push(SteamVR::EventKind::Quit)
+    usecase.poll
+
+    order.should eq ["open"]
+    usecase.connected?.should be_false
+  end
+end

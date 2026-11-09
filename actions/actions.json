@@ -1,0 +1,39 @@
+{
+  "actions": [
+    {
+      "name": "/actions/kxfcm/in/power_off",
+      "type": "boolean",
+      "requirement": "optional"
+    },
+    {
+      "name": "/actions/kxfcm/out/haptic",
+      "type": "vibration"
+    }
+  ],
+  "action_sets": [
+    {
+      "name": "/actions/kxfcm",
+      "usage": "leftright"
+    }
+  ],
+  "default_bindings": [
+    {
+      "controller_type": "frame_controller",
+      "binding_url": "bindings_frame_controller.json"
+    }
+  ],
+  "localization": [
+    {
+      "language_tag": "en_US",
+      "/actions/kxfcm": "KxFrameControllerManager",
+      "/actions/kxfcm/in/power_off": "Turn off this controller (hold)",
+      "/actions/kxfcm/out/haptic": "Haptic feedback"
+    },
+    {
+      "language_tag": "ja_JP",
+      "/actions/kxfcm": "KxFrameControllerManager",
+      "/actions/kxfcm/in/power_off": "このコントローラーを切断（長押し）",
+      "/actions/kxfcm/out/haptic": "振動"
+    }
+  ]
+}
