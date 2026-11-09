@@ -263,8 +263,11 @@ module KxFrameControllerManager
     # 自動更新が残した状態を、設定画面へ見せる形にする。
     private def update_status : Dashboard::UpdateStatus
       state = Update::FileStateStore.new(Runtime::Paths.update_state_path, Runtime::Paths.running_marker_path, Runtime::Paths.update_lock_path).load
-      # 途中で落ちた更新の段階は残ったままになる。走らせたプロセスがもういなければ捨てる。
-      phase = state.progress.try { |progress| Process.exists?(progress.pid) ? progress.phase.to_s.underscore : nil }
+      # 途中で落ちた更新の段階は残ったままになる。走らせたプロセスがもう更新をしていなければ捨てる。
+      phase = state.progress.try do |progress|
+        cmdline = File.read("/proc/#{progress.pid}/cmdline") rescue nil
+        progress.current?(Time.utc, cmdline) ? progress.phase.to_s.underscore : nil
+      end
       last = state.last_run
       Dashboard::UpdateStatus.new(
         version: VERSION,

@@ -65,7 +65,24 @@ module Update
     getter pid : Int64
     getter started_at : Time
 
+    # 更新はユニットの TimeoutStartSec（15 分）で止められる。それより古い段階は、落ちた更新の残りである。
+    MAX_AGE = 30.minutes
+
     def initialize(@phase, @pid, @started_at)
+    end
+
+    # この段階を、走っている更新のものとして信じてよいか。
+    #
+    # cmdline は pid のプロセスの /proc/<pid>/cmdline（NUL 区切り）で、プロセスがいなければ nil を渡す。
+    # プロセスがいるだけでは足りない。落ちた更新の番号が、再起動の後などに別のプロセスへ使い回されることがある。
+    # そのため、本ツールの実行ファイルが update として動いていることまで見る。
+    def current?(now : Time, cmdline : String?) : Bool
+      return false if now - @started_at > MAX_AGE
+      return false unless cmdline
+      arguments = cmdline.split('\0', remove_empty: true)
+      program = arguments.first?
+      return false unless program
+      File.basename(program).starts_with?("kx-frame-controller-manager") && arguments[1]? == "update"
     end
   end
 

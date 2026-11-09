@@ -211,6 +211,22 @@ describe Dashboard::Usecase do
     usecase.state.update_tone.should eq Dashboard::Tone::Ok
   end
 
+  it "画面で確かめられたら、その時刻を最後の確認として見せる" do
+    usecase, _, _, _ = build
+    usecase.check_update = -> { {"up_to_date", nil.as(String?)} }
+    usecase.act("update:check")
+    sleep 10.milliseconds
+    usecase.state.checked_at.should_not be_nil
+  end
+
+  it "確かめられなかったら、確認の時刻を残さない" do
+    usecase, _, _, _ = build
+    usecase.check_update = -> { {"unreachable", nil.as(String?)} }
+    usecase.act("update:check")
+    sleep 10.milliseconds
+    usecase.state.checked_at.should be_nil
+  end
+
   it "確認が例外で終わっても、確認中のままにしない" do
     usecase, _, _, _ = build
     usecase.check_update = -> { raise IO::Error.new("つながらない") }
@@ -316,6 +332,17 @@ describe Dashboard::View do
     hits = update_tab_hits(update_status(phase: "restarting"), canvas)
     hits.none?(&.action.starts_with?("update:")).should be_true
     canvas.texts.should contain "dashboard.update.phase.restarting"
+  end
+
+  it "最後の確認には、自動更新と画面の確認のうち新しいほうの時刻を出す" do
+    canvas = Fakes::Canvas.new
+    state = Dashboard::ViewState.new
+    state.tab = Dashboard::Tab::Update
+    state.snapshot = snapshot
+    later = Time.utc(2026, 11, 10, 9, 30, 0)
+    state.checked_at = later
+    Dashboard::View.new(->(key : String, _vars : Hash(String, String)) { key }, "").render(canvas, state, Config::Root.default)
+    canvas.texts.should contain later.to_local.to_s("%Y-%m-%d %H:%M")
   end
 
   it "走っていなければ、最後の結末を見せる" do

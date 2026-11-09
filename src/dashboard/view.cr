@@ -51,6 +51,12 @@ module Dashboard
     # 更新のタブに出す知らせ。切断の知らせとは別に持つ。
     property update_message : String? = nil
     property update_tone : Tone = Tone::Info
+    # 画面の「更新を確認」で確かめられた時刻。
+    #
+    # 自動更新の状態の last_checked_at には書かない。あれは自動更新の間隔を数える起点であり、
+    # 画面で確かめたせいで、見つけた版の自動での置き換えが間隔ぶん遅れないようにするためである。
+    # 表示ではどちらか新しいほうを「最後の確認」に出す。
+    property checked_at : Time? = nil
   end
 
   # 画面を描き、押せる場所の一覧を返す。
@@ -298,7 +304,8 @@ module Dashboard
       update = state.snapshot.try(&.update)
       return canvas.text(RIGHT_X + 20, top + 32, t("dashboard.loading"), BODY_SIZE, MUTED) unless update
 
-      checked = update.last_checked_at.try { |time| format_time(time) } || t("dashboard.update.never")
+      last_checked = [update.last_checked_at, state.checked_at].compact.max?
+      checked = last_checked.try { |time| format_time(time) } || t("dashboard.update.never")
       info = [
         {t("dashboard.update.version"), update.version, TEXT},
         {t("dashboard.update.last_checked"), checked, TEXT},

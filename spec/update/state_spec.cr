@@ -29,6 +29,30 @@ describe Update::State do
   end
 end
 
+describe Update::Progress do
+  started = Time.utc(2026, 11, 9, 12, 0, 0)
+  progress = Update::Progress.new(Update::Phase::Restarting, 4242_i64, started)
+
+  it "本ツールの実行ファイルが update として動いていれば、走っている更新とみなす" do
+    progress.current?(started + 1.minute, "/home/deck/.local/bin/kx-frame-controller-manager\0update\0").should be_true
+    progress.current?(started + 1.minute, "/home/deck/.local/bin/kx-frame-controller-manager\0update\0--auto\0").should be_true
+  end
+
+  it "プロセスがいなければ、走っていないものとみなす" do
+    progress.current?(started + 1.minute, nil).should be_false
+  end
+
+  # 落ちた更新の番号が、再起動の後に別のプロセスへ使い回された場合。
+  it "同じ番号でも別のプロセスなら、走っていないものとみなす" do
+    progress.current?(started + 1.minute, "/usr/bin/bash\0").should be_false
+    progress.current?(started + 1.minute, "/home/deck/.local/bin/kx-frame-controller-manager\0run\0").should be_false
+  end
+
+  it "ユニットが止めるより古い段階は、走っていないものとみなす" do
+    progress.current?(started + 31.minutes, "/home/deck/.local/bin/kx-frame-controller-manager\0update\0").should be_false
+  end
+end
+
 describe Update::FileStateStore do
   it "書いた状態を読み戻す。ファイルが無ければ空の状態を返す" do
     with_store do |store, _|

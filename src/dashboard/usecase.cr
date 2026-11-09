@@ -274,6 +274,8 @@ module Dashboard
       spawn(name: "dashboard_check_update") do
         begin
           outcome, tag = @check_update.call
+          # 確かめられたときだけ時刻を残す。届かなかったものを確認済みとして見せない。
+          @state.checked_at = Time.utc if outcome == "available" || outcome == "up_to_date"
           @state.update_message = @view.t("dashboard.update.check.#{outcome}", {"tag" => tag || ""})
           @state.update_tone = case outcome
                                when "available"  then Tone::Ok
