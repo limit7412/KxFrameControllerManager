@@ -15,6 +15,10 @@ module SteamVR
 
     IVRSYSTEM_VERSION       = "IVRSystem_026"
     IVRAPPLICATIONS_VERSION = "IVRApplications_008"
+    # IVRInput と IVRSettings は、使えなくても接続は保つ。
+    # 版が合わなければその機能だけを止め、イベントの受け取りと vrmanifest の登録は続ける。
+    IVRINPUT_VERSION    = "IVRInput_011"
+    IVRSETTINGS_VERSION = "IVRSettings_003"
 
     LIBRARY_NAME = "libopenvr_api.so"
 
@@ -36,9 +40,13 @@ module SteamVR
       @shutdown_internal = nil.as(Proc(Nil)?)
       @system = Pointer(LibOpenVR::IVRSystemFnTable).null
       @applications = Pointer(LibOpenVR::IVRApplicationsFnTable).null
+      @input = Pointer(LibOpenVR::IVRInputFnTable).null
+      @settings = Pointer(LibOpenVR::IVRSettingsFnTable).null
       @opened = false
+      @generation = 0
       @reported_init_error = nil.as(Int32?)
       @logged_library_path = nil.as(String?)
+      @repeated_errors = {} of String => Int32
     end
 
     def opened? : Bool
@@ -107,6 +115,10 @@ module SteamVR
         return close_and_unload
       end
 
+      @input = optional_table(get_generic, version_valid, IVRINPUT_VERSION, "長押しの検出").as(LibOpenVR::IVRInputFnTable*)
+      @settings = optional_table(get_generic, version_valid, IVRSETTINGS_VERSION, "省電力").as(LibOpenVR::IVRSettingsFnTable*)
+
+      @generation += 1
       @opened = true
       Log.info { "OpenVR を初期化した" }
       true
@@ -144,6 +156,143 @@ module SteamVR
     def acknowledge_quit : Nil
       return unless @opened
       Proc(Nil).new(@system.value.acknowledge_quit_exiting, Pointer(Void).null).call
+    end
+
+    def generation : Int32
+      @generation
+    end
+
+    def input_available? : Bool
+      @opened && !@input.null?
+    end
+
+    def settings_available? : Bool
+      @opened && !@settings.null?
+    end
+
+    def set_action_manifest_path(path : String) : Bool
+      return false unless input_available?
+      call = Proc(UInt8*, Int32).new(@input.value.set_action_manifest_path, Pointer(Void).null)
+      check("SetActionManifestPath", call.call(path.to_unsafe))
+    end
+
+    def action_set_handle(name : String) : UInt64?
+      handle_of("GetActionSetHandle", name) { @input.value.get_action_set_handle }
+    end
+
+    def action_handle(name : String) : UInt64?
+      handle_of("GetActionHandle", name) { @input.value.get_action_handle }
+    end
+
+    def input_source_handle(path : String) : UInt64?
+      handle_of("GetInputSourceHandle", path) { @input.value.get_input_source_handle }
+    end
+
+    def update_action_state(action_set : UInt64, priority : Int32) : Bool
+      return false unless input_available?
+      set = LibOpenVR::VRActiveActionSet.new
+      set.action_set = action_set
+      set.priority = priority
+      call = Proc(LibOpenVR::VRActiveActionSet*, UInt32, UInt32, Int32).new(@input.value.update_action_state, Pointer(Void).null)
+      error = call.call(pointerof(set), sizeof(LibOpenVR::VRActiveActionSet).to_u32, 1_u32)
+      # 20 ミリ秒ごとに呼ぶため、失敗を毎回書くとログが埋まる。番号が変わったときだけ書く。
+      report_repeated("UpdateActionState", error)
+      error == LibOpenVR::INPUT_ERROR_NONE
+    end
+
+    def digital_action_state(action : UInt64, restrict_to : UInt64) : Bool?
+      return nil unless input_available?
+      data = LibOpenVR::InputDigitalActionData.new
+      call = Proc(UInt64, LibOpenVR::InputDigitalActionData*, UInt32, UInt64, Int32).new(@input.value.get_digital_action_data, Pointer(Void).null)
+      error = call.call(action, pointerof(data), sizeof(LibOpenVR::InputDigitalActionData).to_u32, restrict_to)
+      report_repeated("GetDigitalActionData", error)
+      return nil unless error == LibOpenVR::INPUT_ERROR_NONE && data.active
+      data.state
+    end
+
+    def trigger_haptic(action : UInt64, start_s : Float32, duration_s : Float32, frequency : Float32, amplitude : Float32, restrict_to : UInt64) : Bool
+      return false unless input_available?
+      call = Proc(UInt64, Float32, Float32, Float32, Float32, UInt64, Int32).new(@input.value.trigger_haptic_vibration_action, Pointer(Void).null)
+      check("TriggerHapticVibrationAction", call.call(action, start_s, duration_s, frequency, amplitude, restrict_to))
+    end
+
+    def controller_index(role : Int32) : UInt32?
+      return nil unless @opened
+      call = Proc(Int32, UInt32).new(@system.value.get_tracked_device_index_for_controller_role, Pointer(Void).null)
+      index = call.call(role)
+      index == LibOpenVR::TRACKED_DEVICE_INDEX_INVALID ? nil : index
+    end
+
+    def device_connected?(index : UInt32) : Bool
+      return false unless @opened
+      Proc(UInt32, Bool).new(@system.value.is_tracked_device_connected, Pointer(Void).null).call(index)
+    end
+
+    def string_property(index : UInt32, property : Int32) : String?
+      return nil unless @opened
+      call = Proc(UInt32, Int32, UInt8*, UInt32, Int32*, UInt32).new(@system.value.get_string_tracked_device_property, Pointer(Void).null)
+      buffer = Bytes.new(LibOpenVR::MAX_PROPERTY_STRING_SIZE)
+      error = 0
+      size = call.call(index, property, buffer.to_unsafe, buffer.size.to_u32, pointerof(error))
+      return nil unless error == LibOpenVR::PROPERTY_SUCCESS && size > 0
+      String.new(buffer.to_unsafe)
+    end
+
+    def float_property(index : UInt32, property : Int32) : Float32?
+      return nil unless @opened
+      call = Proc(UInt32, Int32, Int32*, Float32).new(@system.value.get_float_tracked_device_property, Pointer(Void).null)
+      error = 0
+      value = call.call(index, property, pointerof(error))
+      error == LibOpenVR::PROPERTY_SUCCESS ? value : nil
+    end
+
+    def bool_property(index : UInt32, property : Int32) : Bool?
+      return nil unless @opened
+      call = Proc(UInt32, Int32, Int32*, Bool).new(@system.value.get_bool_tracked_device_property, Pointer(Void).null)
+      error = 0
+      value = call.call(index, property, pointerof(error))
+      error == LibOpenVR::PROPERTY_SUCCESS ? value : nil
+    end
+
+    def get_float_setting(section : String, key : String) : {Float32, Int32}
+      return {0.0_f32, -1} unless settings_available?
+      call = Proc(UInt8*, UInt8*, Int32*, Float32).new(@settings.value.get_float, Pointer(Void).null)
+      error = 0
+      value = call.call(section.to_unsafe, key.to_unsafe, pointerof(error))
+      {value, error}
+    end
+
+    def get_string_setting(section : String, key : String) : {String, Int32}
+      return {"", -1} unless settings_available?
+      call = Proc(UInt8*, UInt8*, UInt8*, UInt32, Int32*, Nil).new(@settings.value.get_string, Pointer(Void).null)
+      buffer = Bytes.new(LibOpenVR::MAX_PROPERTY_STRING_SIZE)
+      error = 0
+      call.call(section.to_unsafe, key.to_unsafe, buffer.to_unsafe, buffer.size.to_u32, pointerof(error))
+      {String.new(buffer.to_unsafe), error}
+    end
+
+    def set_float_setting(section : String, key : String, value : Float32) : Int32
+      return -1 unless settings_available?
+      call = Proc(UInt8*, UInt8*, Float32, Int32*, Nil).new(@settings.value.set_float, Pointer(Void).null)
+      error = 0
+      call.call(section.to_unsafe, key.to_unsafe, value, pointerof(error))
+      error
+    end
+
+    def set_string_setting(section : String, key : String, value : String) : Int32
+      return -1 unless settings_available?
+      call = Proc(UInt8*, UInt8*, UInt8*, Int32*, Nil).new(@settings.value.set_string, Pointer(Void).null)
+      error = 0
+      call.call(section.to_unsafe, key.to_unsafe, value.to_unsafe, pointerof(error))
+      error
+    end
+
+    def remove_setting(section : String, key : String) : Int32
+      return -1 unless settings_available?
+      call = Proc(UInt8*, UInt8*, Int32*, Nil).new(@settings.value.remove_key_in_section, Pointer(Void).null)
+      error = 0
+      call.call(section.to_unsafe, key.to_unsafe, pointerof(error))
+      error
     end
 
     # イベントの番号を読み分ける。spec から確かめられるよう、クラスに公開しておく。
@@ -261,11 +410,45 @@ module SteamVR
       false
     end
 
+    # 無くても接続を保てるインターフェースを取る。版が合わなければ null を返し、その機能を止める。
+    private def optional_table(get_generic, version_valid, version : String, feature : String) : Void*
+      unless version_valid.call(version.to_unsafe)
+        Log.error { "SteamVR が #{version} に対応していないため#{feature}を無効にする" }
+        return Pointer(Void).null
+      end
+      error = 0
+      table = get_generic.call("FnTable:#{version}".to_unsafe, pointerof(error))
+      if table.null?
+        Log.error { "#{version} の FnTable を取得できなかったため#{feature}を無効にする (#{error})" }
+      end
+      table
+    end
+
+    # 名前からハンドルを引く 3 つの関数（GetActionSetHandle など）は同じ形をしている。
+    private def handle_of(operation : String, name : String, & : -> Void*) : UInt64?
+      return nil unless input_available?
+      call = Proc(UInt8*, UInt64*, Int32).new(yield, Pointer(Void).null)
+      handle = 0_u64
+      return nil unless check(operation, call.call(name.to_unsafe, pointerof(handle)))
+      handle
+    end
+
+    # 繰り返し呼ぶ関数の失敗を、番号が変わったときだけ書く。
+    private def report_repeated(operation : String, error : Int32) : Nil
+      return if @repeated_errors[operation]? == error
+      @repeated_errors[operation] = error
+      return if error == LibOpenVR::INPUT_ERROR_NONE
+      Log.warn { "#{operation} が失敗した (#{error})" }
+    end
+
     private def close_and_unload : Bool
       @shutdown_internal.try(&.call)
       @shutdown_internal = nil
       @system = Pointer(LibOpenVR::IVRSystemFnTable).null
       @applications = Pointer(LibOpenVR::IVRApplicationsFnTable).null
+      @input = Pointer(LibOpenVR::IVRInputFnTable).null
+      @settings = Pointer(LibOpenVR::IVRSettingsFnTable).null
+      @repeated_errors.clear
       @opened = false
       unload
     end

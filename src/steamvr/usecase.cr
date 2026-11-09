@@ -14,6 +14,14 @@ module SteamVR
     APP_KEY  = "kairo.kxframecontrollermanager"
     APP_NAME = "KxFrameControllerManager"
 
+    # SteamVR の終了を受けて OpenVR を閉じる直前に呼ぶ。
+    # 省電力で変えた設定値を、閉じる前に戻すために使う（仕様書 3.8 節）。
+    property before_close : Proc(Nil) = -> { }
+
+    # アクションマニフェストと既定バインドの中身。キーは書き出す先の絶対パスである。
+    # 実行ファイルへ埋め込んだものを、vrmanifest と一緒に接続のたびに書き出す。
+    property action_files : Hash(String, String) = {} of String => String
+
     def initialize(
       @repository : Repository,
       @store : ManifestStore,
@@ -92,6 +100,7 @@ module SteamVR
     def register : Bool
       return false unless @repository.opened?
 
+      @action_files.each { |path, content| @store.write(path, content) }
       @store.write(@manifest_path, self.class.build_manifest(@exe_path, @action_manifest_path))
       unless @repository.add_application_manifest(@manifest_path)
         Log.error { "vrmanifest の登録に失敗した: #{@manifest_path}" }
@@ -133,6 +142,11 @@ module SteamVR
 
       events = @repository.poll_events
       if events.any?(&.kind.quit?)
+        begin
+          @before_close.call
+        rescue exception
+          Log.error(exception: exception) { "OpenVR を閉じる前の処理に失敗した" }
+        end
         @repository.acknowledge_quit
         @repository.close
         Log.info { "SteamVR の終了を検知したため OpenVR を閉じた" }

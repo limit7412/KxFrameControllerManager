@@ -28,6 +28,59 @@ module SteamVR
     EVENT_TRACKED_DEVICE_DEACTIVATED = 101
     EVENT_QUIT                       = 700
 
+    # EVRInputError_VRInputError_None と EVRSettingsError_VRSettingsError_None
+    INPUT_ERROR_NONE    = 0
+    SETTINGS_ERROR_NONE = 0
+    # EVRSettingsError_VRSettingsError_UnsetSettingHasNoDefault
+    #
+    # 値が書かれておらず既定値も無いキーを読んだときに返る。
+    # 省電力で「元は未設定だった」と判断するのに使う（仕様書 3.8 節）。
+    SETTINGS_ERROR_UNSET_HAS_NO_DEFAULT = 5
+    # ETrackedPropertyError_TrackedProp_Success
+    PROPERTY_SUCCESS = 0
+
+    # ETrackedControllerRole
+    CONTROLLER_ROLE_LEFT_HAND  = 1
+    CONTROLLER_ROLE_RIGHT_HAND = 2
+
+    # k_unTrackedDeviceIndex_Hmd と k_unTrackedDeviceIndexInvalid
+    TRACKED_DEVICE_INDEX_HMD     =          0_u32
+    TRACKED_DEVICE_INDEX_INVALID = 0xFFFFFFFF_u32
+
+    # ETrackedDeviceProperty のうち、本ツールが読むもの。
+    PROP_SERIAL_NUMBER_STRING              = 1002
+    PROP_DISPLAY_SUPPORTS_ANALOG_GAIN_BOOL = 2085
+    PROP_DISPLAY_MIN_ANALOG_GAIN_FLOAT     = 2086
+    PROP_DISPLAY_MAX_ANALOG_GAIN_FLOAT     = 2087
+
+    # k_unMaxPropertyStringSize。文字列のプロパティと設定値を読むバッファの大きさに使う。
+    MAX_PROPERTY_STRING_SIZE = 32768
+
+    # k_nActionSetOverlayGlobalPriorityMin（仕様書 3.1 節）
+    ACTION_SET_OVERLAY_GLOBAL_PRIORITY_MIN = 0x01000000
+
+    # InputDigitalActionData_t。
+    #
+    # VREvent_t と違い、#pragma pack の指定の外にあるため自然な境界で並ぶ。
+    # bool の後ろに 7 バイト、2 つ目の bool の組の後ろに 2 バイトの詰め物が入り、全体は 24 バイトである。
+    # Crystal の struct も C と同じ規則で詰め物を入れる。
+    struct InputDigitalActionData
+      active : Bool
+      active_origin : UInt64
+      state : Bool
+      changed : Bool
+      update_time : Float32
+    end
+
+    # VRActiveActionSet_t（32 バイト）。
+    struct VRActiveActionSet
+      action_set : UInt64
+      restricted_to_device : UInt64
+      secondary_action_set : UInt64
+      padding : UInt32
+      priority : Int32
+    end
+
     # VREvent_t。
     #
     # openvr_capi.h は Windows 以外で 4 バイト境界に詰める（#pragma pack( push, 4 )）。
@@ -130,6 +183,59 @@ module SteamVR
       launch_internal_process : Void*                    # LaunchInternalProcess
       register_subprocess : Void*                        # RegisterSubprocess
       get_current_scene_process_id : Void*               # GetCurrentSceneProcessId
+    end
+
+    # VR_IVRInput_FnTable（要素数 34）
+    struct IVRInputFnTable
+      set_action_manifest_path : Void*              # SetActionManifestPath
+      get_action_set_handle : Void*                 # GetActionSetHandle
+      get_action_handle : Void*                     # GetActionHandle
+      get_input_source_handle : Void*               # GetInputSourceHandle
+      update_action_state : Void*                   # UpdateActionState
+      get_digital_action_data : Void*               # GetDigitalActionData
+      get_analog_action_data : Void*                # GetAnalogActionData
+      get_pose_action_data_relative_to_now : Void*  # GetPoseActionDataRelativeToNow
+      get_pose_action_data_for_next_frame : Void*   # GetPoseActionDataForNextFrame
+      get_skeletal_action_data : Void*              # GetSkeletalActionData
+      get_dominant_hand : Void*                     # GetDominantHand
+      set_dominant_hand : Void*                     # SetDominantHand
+      get_eye_tracking_data_relative_to_now : Void* # GetEyeTrackingDataRelativeToNow
+      get_eye_tracking_data_for_next_frame : Void*  # GetEyeTrackingDataForNextFrame
+      get_bone_count : Void*                        # GetBoneCount
+      get_bone_hierarchy : Void*                    # GetBoneHierarchy
+      get_bone_name : Void*                         # GetBoneName
+      get_skeletal_reference_transforms : Void*     # GetSkeletalReferenceTransforms
+      get_skeletal_tracking_level : Void*           # GetSkeletalTrackingLevel
+      get_skeletal_bone_data : Void*                # GetSkeletalBoneData
+      get_skeletal_summary_data : Void*             # GetSkeletalSummaryData
+      get_skeletal_bone_data_compressed : Void*     # GetSkeletalBoneDataCompressed
+      decompress_skeletal_bone_data : Void*         # DecompressSkeletalBoneData
+      trigger_haptic_vibration_action : Void*       # TriggerHapticVibrationAction
+      get_action_origins : Void*                    # GetActionOrigins
+      get_origin_localized_name : Void*             # GetOriginLocalizedName
+      get_origin_tracked_device_info : Void*        # GetOriginTrackedDeviceInfo
+      get_action_binding_info : Void*               # GetActionBindingInfo
+      show_action_origins : Void*                   # ShowActionOrigins
+      show_bindings_for_action_set : Void*          # ShowBindingsForActionSet
+      get_component_state_for_binding : Void*       # GetComponentStateForBinding
+      is_using_legacy_input : Void*                 # IsUsingLegacyInput
+      open_binding_u_i : Void*                      # OpenBindingUI
+      get_binding_variant : Void*                   # GetBindingVariant
+    end
+
+    # VR_IVRSettings_FnTable（要素数 11）
+    struct IVRSettingsFnTable
+      get_settings_error_name_from_enum : Void* # GetSettingsErrorNameFromEnum
+      set_bool : Void*                          # SetBool
+      set_int32 : Void*                         # SetInt32
+      set_float : Void*                         # SetFloat
+      set_string : Void*                        # SetString
+      get_bool : Void*                          # GetBool
+      get_int32 : Void*                         # GetInt32
+      get_float : Void*                         # GetFloat
+      get_string : Void*                        # GetString
+      remove_section : Void*                    # RemoveSection
+      remove_key_in_section : Void*             # RemoveKeyInSection
     end
 
     alias PVREvent = VREvent*

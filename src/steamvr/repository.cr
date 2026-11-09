@@ -43,6 +43,52 @@ module SteamVR
 
     # OpenVR を閉じる前に、SteamVR の終了要求へ応答する（AcknowledgeQuit_Exiting）。
     abstract def acknowledge_quit : Nil
+
+    # 開き直すたびに 1 つ進む番号。
+    # SteamVR を再起動するとアクションのハンドルが無効になるため、
+    # 入力の側はこの番号が変わったのを見てハンドルを取り直す。
+    abstract def generation : Int32
+
+    # IVRInput（SteamVR Input）を使えるか。SteamVR が版に対応していなければ偽になる。
+    abstract def input_available? : Bool
+
+    # IVRSettings を使えるか。
+    abstract def settings_available? : Bool
+
+    # --- IVRInput（仕様書 3.1 節） ---
+
+    abstract def set_action_manifest_path(path : String) : Bool
+    abstract def action_set_handle(name : String) : UInt64?
+    abstract def action_handle(name : String) : UInt64?
+    abstract def input_source_handle(path : String) : UInt64?
+
+    # アクションセット 1 つ分の状態を取り込む。
+    abstract def update_action_state(action_set : UInt64, priority : Int32) : Bool
+
+    # boolean のアクションが押されているか。restrict_to に手の入力ソースを渡すと片手ずつ読める。
+    # アクションが有効でない（どのボタンにも割り当てられていない）ときと、読めなかったときは nil を返す。
+    abstract def digital_action_state(action : UInt64, restrict_to : UInt64) : Bool?
+
+    abstract def trigger_haptic(action : UInt64, start_s : Float32, duration_s : Float32, frequency : Float32, amplitude : Float32, restrict_to : UInt64) : Bool
+
+    # --- IVRSystem のデバイス情報（仕様書 3.3 節） ---
+
+    # 役割（左手、右手）に割り当たったデバイス番号。割り当てが無ければ nil。
+    abstract def controller_index(role : Int32) : UInt32?
+    abstract def device_connected?(index : UInt32) : Bool
+    abstract def string_property(index : UInt32, property : Int32) : String?
+    abstract def float_property(index : UInt32, property : Int32) : Float32?
+    abstract def bool_property(index : UInt32, property : Int32) : Bool?
+
+    # --- IVRSettings（仕様書 3.8 節） ---
+    #
+    # 読み出しは値とエラー番号の組を返す。未設定と読み出しの失敗を呼び出し側で読み分けるためである。
+
+    abstract def get_float_setting(section : String, key : String) : {Float32, Int32}
+    abstract def get_string_setting(section : String, key : String) : {String, Int32}
+    abstract def set_float_setting(section : String, key : String, value : Float32) : Int32
+    abstract def set_string_setting(section : String, key : String, value : String) : Int32
+    abstract def remove_setting(section : String, key : String) : Int32
   end
 
   # vrmanifest ファイルの読み書きの境界。

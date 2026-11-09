@@ -36,6 +36,25 @@ module Runtime
       File.join(data_directory, "kx-frame-controller-manager.vrmanifest")
     end
 
+    # SteamVR Input のアクションマニフェストと既定バインドを書き出すディレクトリ。
+    def self.actions_directory : String
+      File.join(data_directory, "actions")
+    end
+
+    def self.action_manifest_path : String
+      File.join(actions_directory, "actions.json")
+    end
+
+    # 省電力で変える前の値（仕様書 3.8 節）。
+    def self.power_save_state_path : String
+      File.join(state_directory, "power_save.json")
+    end
+
+    # systemd のユーザーユニット（仕様書 6.2 節）。
+    def self.systemd_unit_path(env = ENV) : String
+      File.join(xdg("XDG_CONFIG_HOME", ".config", env), "systemd", "user", "kx-frame-controller-manager.service")
+    end
+
     # 起動した実行ファイルの絶対パス。
     # vrmanifest の binary_path_linux と、更新での置き換えに使う。
     def self.executable_path : String

@@ -1,0 +1,45 @@
+{
+  "action_manifest_version": 0,
+  "alias_info": {},
+  "app_key": "kairo.kxframecontrollermanager",
+  "category": "steamvr_input",
+  "controller_type": "frame_controller",
+  "description": "Hold View (left) or Menu (right) to turn off that controller.",
+  "name": "KxFrameControllerManager default",
+  "options": {},
+  "simulated_actions": [],
+  "bindings": {
+    "/actions/kxfcm": {
+      "sources": [
+        {
+          "path": "/user/hand/left/input/view",
+          "mode": "button",
+          "inputs": {
+            "click": {
+              "output": "/actions/kxfcm/in/power_off"
+            }
+          }
+        },
+        {
+          "path": "/user/hand/right/input/menu",
+          "mode": "button",
+          "inputs": {
+            "click": {
+              "output": "/actions/kxfcm/in/power_off"
+            }
+          }
+        }
+      ],
+      "haptics": [
+        {
+          "path": "/user/hand/left/output/haptic",
+          "output": "/actions/kxfcm/out/haptic"
+        },
+        {
+          "path": "/user/hand/right/output/haptic",
+          "output": "/actions/kxfcm/out/haptic"
+        }
+      ]
+    }
+  }
+}
