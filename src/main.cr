@@ -227,6 +227,12 @@ module KxFrameControllerManager
       dashboard.buttons = PowerOff::Hand.values.to_h { |hand| {hand, SteamVR::Bindings.buttons(hand)} }
       dashboard.status = -> { snapshot }
       dashboard.disconnect = ->(hands : Array(PowerOff::Hand)) { parts.power_off.manual(hands) }
+      dashboard.check_update = -> do
+        usecase = Update::Usecase.new(Update::GitHubRepository.new("KxFrameControllerManager/#{VERSION}"))
+        result = usecase.check(VERSION, @config.current.update.channel)
+        {result.outcome.to_s.underscore, result.release.try(&.tag)}
+      end
+      dashboard.start_update = -> { Runtime::Systemd.start_manual_update(Runtime::Paths.executable_path) }
       dashboard.canvas_factory = ->(width : Int32, height : Int32) { Dashboard::CairoCanvas.create(width, height).as(Dashboard::Canvas?) }
       dashboard
     end
@@ -250,6 +256,25 @@ module KxFrameControllerManager
         power_save_pending: File.exists?(Runtime::Paths.power_save_state_path),
         gain_range: connected ? parts.settings.gain_range : nil,
         config_errors: @config_errors,
+        update: update_status,
+      )
+    end
+
+    # 自動更新が残した状態を、設定画面へ見せる形にする。
+    private def update_status : Dashboard::UpdateStatus
+      state = Update::FileStateStore.new(Runtime::Paths.update_state_path, Runtime::Paths.running_marker_path, Runtime::Paths.update_lock_path).load
+      # 途中で落ちた更新の段階は残ったままになる。走らせたプロセスがもういなければ捨てる。
+      phase = state.progress.try { |progress| Process.exists?(progress.pid) ? progress.phase.to_s.underscore : nil }
+      last = state.last_run
+      Dashboard::UpdateStatus.new(
+        version: VERSION,
+        last_checked_at: state.last_checked_at,
+        last_outcome: last.try(&.outcome),
+        last_tag: last.try(&.tag),
+        last_finished_at: last.try(&.finished_at),
+        phase: phase,
+        service_installed: File.exists?(Runtime::Paths.systemd_unit_path),
+        executable: Runtime::Paths.executable_path,
       )
     end
 

@@ -1,6 +1,19 @@
 require "../spec_helper"
 
-private def snapshot(errors = [] of String) : Dashboard::Snapshot
+private def update_status(phase : String? = nil, installed : Bool = true, outcome : String? = nil) : Dashboard::UpdateStatus
+  Dashboard::UpdateStatus.new(
+    version: "1.2.3",
+    last_checked_at: Time.utc(2026, 11, 9, 12, 0, 0),
+    last_outcome: outcome,
+    last_tag: outcome ? "1.3.0" : nil,
+    last_finished_at: outcome ? Time.utc(2026, 11, 9, 12, 1, 0) : nil,
+    phase: phase,
+    service_installed: installed,
+    executable: "/home/deck/.local/bin/kx-frame-controller-manager",
+  )
+end
+
+private def snapshot(errors = [] of String, update = update_status) : Dashboard::Snapshot
   Dashboard::Snapshot.new(
     steamvr_connected: true,
     left: Dashboard::HandStatus.new(true, "cv.aaaaaaaaaaaa", "view"),
@@ -10,6 +23,7 @@ private def snapshot(errors = [] of String) : Dashboard::Snapshot
     power_save_pending: false,
     gain_range: {0.5, 1.6},
     config_errors: errors,
+    update: update,
   )
 end
 
@@ -161,6 +175,51 @@ describe Dashboard::Usecase do
     usecase.state.message.should eq "dashboard.disconnect.busy"
   end
 
+  it "今すぐの更新は 2 回目で始める" do
+    usecase, _, _, _ = build
+    started = 0
+    usecase.start_update = -> { started += 1; true }
+    now = Time.instant
+    usecase.act("update:run", now)
+    started.should eq 0
+    usecase.state.armed.should eq "update"
+    usecase.act("update:run", now)
+    started.should eq 1
+    usecase.state.armed.should be_nil
+    usecase.state.update_message.should eq "dashboard.update.started"
+  end
+
+  it "更新を始められなければ知らせる" do
+    usecase, _, _, _ = build
+    usecase.start_update = -> { false }
+    usecase.act("update:run")
+    usecase.act("update:run")
+    usecase.state.update_message.should eq "dashboard.update.start_failed"
+    usecase.state.update_tone.should eq Dashboard::Tone::Error
+  end
+
+  it "更新の確認は別のファイバで行い、結果を知らせる" do
+    usecase, _, _, _ = build
+    calls = 0
+    usecase.check_update = -> { calls += 1; {"available", "1.3.0".as(String?)} }
+    usecase.act("update:check")
+    usecase.state.checking?.should be_true
+    sleep 10.milliseconds
+    calls.should eq 1
+    usecase.state.checking?.should be_false
+    usecase.state.update_message.should eq "dashboard.update.check.available"
+    usecase.state.update_tone.should eq Dashboard::Tone::Ok
+  end
+
+  it "確認が例外で終わっても、確認中のままにしない" do
+    usecase, _, _, _ = build
+    usecase.check_update = -> { raise IO::Error.new("つながらない") }
+    usecase.act("update:check")
+    sleep 10.milliseconds
+    usecase.state.checking?.should be_false
+    usecase.state.update_message.should eq "dashboard.update.check.unreachable"
+  end
+
   it "close でタブを消し、次の tick で作り直す" do
     usecase, repository, _, _ = build
     usecase.tick
@@ -208,6 +267,13 @@ describe Dashboard::Usecase do
   end
 end
 
+private def update_tab_hits(status : Dashboard::UpdateStatus, canvas = Fakes::Canvas.new) : Array(Dashboard::Hit)
+  state = Dashboard::ViewState.new
+  state.tab = Dashboard::Tab::Update
+  state.snapshot = snapshot(update: status)
+  Dashboard::View.new(->(key : String, _vars : Hash(String, String)) { key }, "").render(canvas, state, Config::Root.default)
+end
+
 describe Dashboard::View do
   it "どちらのタブでも、項目の操作はすべて押せる場所にある" do
     translate = ->(key : String, _vars : Hash(String, String)) { key }
@@ -225,13 +291,45 @@ describe Dashboard::View do
     actions.should contain "disconnect:both"
   end
 
-  it "押せる場所は重ならない" do
+  it "どのタブでも、押せる場所は重ならない" do
     translate = ->(key : String, _vars : Hash(String, String)) { key }
-    hits = Dashboard::View.new(translate, "").render(Fakes::Canvas.new, Dashboard::ViewState.new, Config::Root.default)
-    hits.each_combination(2) do |(a, b)|
-      overlap = a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
-      fail "#{a.action} と #{b.action} が重なる" if overlap
+    Dashboard::Tab.each do |tab|
+      state = Dashboard::ViewState.new
+      state.tab = tab
+      state.snapshot = snapshot
+      hits = Dashboard::View.new(translate, "").render(Fakes::Canvas.new, state, Config::Root.default)
+      hits.each_combination(2) do |(a, b)|
+        overlap = a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
+        fail "#{a.action} と #{b.action} が重なる" if overlap
+      end
     end
+  end
+
+  it "更新のタブには、確認と今すぐの更新のボタンがある" do
+    actions = update_tab_hits(update_status).map(&.action)
+    actions.should contain "update:check"
+    actions.should contain "update:run"
+  end
+
+  it "更新が走っている間は、どちらのボタンも押せず、段階を見せる" do
+    canvas = Fakes::Canvas.new
+    hits = update_tab_hits(update_status(phase: "restarting"), canvas)
+    hits.none?(&.action.starts_with?("update:")).should be_true
+    canvas.texts.should contain "dashboard.update.phase.restarting"
+  end
+
+  it "走っていなければ、最後の結末を見せる" do
+    canvas = Fakes::Canvas.new
+    update_tab_hits(update_status(outcome: "rolled_back"), canvas)
+    canvas.texts.should contain "update.rolled_back"
+  end
+
+  it "常駐が systemd のユニットでなければ、今すぐの更新は押せない" do
+    canvas = Fakes::Canvas.new
+    actions = update_tab_hits(update_status(installed: false), canvas).map(&.action)
+    actions.should contain "update:check"
+    actions.should_not contain "update:run"
+    canvas.texts.should contain "dashboard.update.not_installed"
   end
 
   it "切断の処理中は切断のボタンを押せない" do

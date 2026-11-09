@@ -20,6 +20,12 @@ module Update
     # 手動の `update` はこの記録を見ない。利用者が明示的に入れようとしているためである。
     property rejected : Array(String) = [] of String
 
+    # 走っている更新の段階。終われば nil に戻す。
+    # 常駐の設定画面が読み、進み具合として見せる。
+    property progress : Progress? = nil
+    # 最後に走った更新の結末。設定と間隔のために何もしなかった回は残さない。
+    property last_run : LastRun? = nil
+
     def initialize
     end
 
@@ -31,6 +37,47 @@ module Update
 
     def rejected?(tag : String) : Bool
       @rejected.includes?(tag)
+    end
+  end
+
+  # 更新の段階。
+  enum Phase
+    # GitHub Releases を見ている。
+    Checking
+    # 新しい版を取っている。
+    Downloading
+    # 取ったものを試しに起動している。
+    Verifying
+    # 置き換えてユニットを再起動し、新しい版の起動を待っている。
+    Restarting
+    # 新しい版が起動しなかったため、元へ戻している。
+    RollingBack
+  end
+
+  # 走っている更新の段階と、走らせているプロセス。
+  #
+  # 更新のプロセスが途中で落ちると、ファイルには段階が残ったままになる。
+  # 読む側はプロセス番号を見て、もう走っていない更新の段階を捨てる。
+  struct Progress
+    include JSON::Serializable
+
+    getter phase : Phase
+    getter pid : Int64
+    getter started_at : Time
+
+    def initialize(@phase, @pid, @started_at)
+    end
+  end
+
+  # 走り終えた更新の結末。outcome は RunOutcome の名前を小文字とアンダースコアにしたものである。
+  struct LastRun
+    include JSON::Serializable
+
+    getter outcome : String
+    getter tag : String?
+    getter finished_at : Time
+
+    def initialize(@outcome, @tag, @finished_at)
     end
   end
 

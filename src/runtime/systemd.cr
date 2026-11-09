@@ -68,6 +68,25 @@ module Runtime
       end
     end
 
+    # 設定画面から始める今すぐの更新のユニット。systemd-run で一時的に作り、終われば消える。
+    MANUAL_UPDATE_UNIT_NAME = "kx-frame-controller-manager-update-now"
+
+    # 今すぐの更新を、常駐とは別のユニットで始める。
+    #
+    # 常駐の子プロセスとして `update` を走らせると、常駐のユニットを再起動したときに一緒に止められる。
+    # 新しい版の起動を確かめ、駄目なら戻す者がいなくなるため、systemd-run で別のユニットにする。
+    # 同じ名前のユニットが走っていれば systemd-run は断るので、重ねて押しても 2 つは走らない。
+    # 手で打った `update` と同じく、設定の無効と間隔、前に戻した版の記録は見ない。
+    def self.start_manual_update(executable : String) : Bool
+      arguments = ["--user", "--unit=#{MANUAL_UPDATE_UNIT_NAME}", "--collect", "--quiet", executable, "update"]
+      status = Process.run("systemd-run", arguments, output: Process::Redirect::Close, error: Process::Redirect::Close)
+      Log.error { "今すぐの更新を始められなかった（systemd-run の終了コード #{status.exit_code}）" } unless status.success?
+      status.success?
+    rescue exception : File::NotFoundError | IO::Error
+      Log.error { "systemd-run を呼べなかった: #{exception.message}" }
+      false
+    end
+
     # 自動更新のタイマーが書き出されているか。
     # 自動更新より前の版から `update` で上げた環境には無い。`install` をやり直すまで置かれない。
     def self.update_timer_installed?(unit_path : String = Paths.systemd_unit_path) : Bool

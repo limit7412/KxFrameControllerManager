@@ -410,6 +410,58 @@ describe Update::AutoUpdater do
   end
 end
 
+describe "Update::AutoUpdater の進み具合と結末" do
+  it "走っている間は段階を残し、終わったら消して結末を残す" do
+    with_updater do |fixture|
+      phases = [] of Update::Phase
+      state = fixture.state
+      start_new_version(fixture)
+      fixture.clock.on_sleep = -> do
+        state.state.progress.try { |progress| phases << progress.phase }
+        nil
+      end
+      fixture.updater.run(settings)
+
+      phases.uniq.should eq [Update::Phase::Restarting]
+      state.state.progress.should be_nil
+      last = state.state.last_run.not_nil!
+      last.outcome.should eq "restarted"
+      last.tag.should eq "1.1.0"
+      last.finished_at.should eq fixture.clock.now
+    end
+  end
+
+  it "段階には走らせているプロセスの番号を残す" do
+    with_updater do |fixture|
+      pids = [] of Int64
+      state = fixture.state
+      fixture.service.on_restart = ->(_count : Int32) do
+        state.state.progress.try { |progress| pids << progress.pid }
+        nil
+      end
+      fixture.updater.run(settings)
+      pids.first.should eq Process.pid
+    end
+  end
+
+  it "巻き戻したら、その結末を残す" do
+    with_updater do |fixture|
+      fixture.service.on_restart = ->(_count : Int32) { fixture.service.pid = 200_i64; nil }
+      fixture.updater.run(settings)
+      fixture.state.state.last_run.not_nil!.outcome.should eq "rolled_back"
+    end
+  end
+
+  it "設定と間隔のために何もしなかった回は、前の結末を残したままにする" do
+    with_updater do |fixture|
+      before = Update::LastRun.new("up_to_date", nil, fixture.clock.now - 1.hour)
+      fixture.state.state.last_run = before
+      fixture.updater.run(settings(auto_update: false))
+      fixture.state.state.last_run.should eq before
+    end
+  end
+end
+
 describe Update::ProcessPreflight do
   it "出力が版として一致すれば通す。タグの v は無視する" do
     Update::ProcessPreflight.matches?(true, "1.2.3\n", "v1.2.3").should be_true

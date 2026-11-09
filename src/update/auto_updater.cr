@@ -165,9 +165,11 @@ module Update
     # 設定の無効と間隔、巻き戻した版の記録を見ない。
     def run(settings : Config::UpdateSection, manual : Bool = false) : RunResult
       return RunResult.new(RunOutcome::Busy) unless @state.try_lock
+      result = nil.as(RunResult?)
       begin
-        run_exclusively(settings, manual)
+        result = run_exclusively(settings, manual)
       ensure
+        finish(result)
         @state.unlock
       end
     end
@@ -177,12 +179,13 @@ module Update
         return RunResult.new(RunOutcome::Disabled)
       end
 
-      state = @state.load
       now = @clock.now
-      return RunResult.new(RunOutcome::NotDue) if !manual && !due?(state, settings, now)
+      return RunResult.new(RunOutcome::NotDue) if !manual && !due?(@state.load, settings, now)
 
+      progress(Phase::Checking)
       # 確認に失敗しても時刻を残す。回線が無い間に、タイマーのたびに API を叩き直さないためである。
       result = Usecase.new(@repository).check(@running_version, settings.channel)
+      state = @state.load
       state.last_checked_at = now
       @state.save(state)
 
@@ -209,10 +212,12 @@ module Update
 
     private def install(release : Release, channel : String) : RunResult
       tag = release.tag
+      progress(Phase::Downloading)
       record = @installer.download(release) ? @installer.staged(channel) : nil
       return RunResult.new(RunOutcome::Failed, tag) unless record
 
       @installer.make_executable
+      progress(Phase::Verifying)
       unless @preflight.verify(@installer.staged_path, tag)
         # このヘッドセットで起動できないものは、取り直しても起動できない。
         # 覚えておかないと、間隔のたびに取り直しては捨てることになる。
@@ -224,6 +229,7 @@ module Update
       @installer.apply(record)
       return RunResult.new(RunOutcome::Applied, tag) unless @service.active?
 
+      progress(Phase::Restarting)
       if @service.restart && started?(tag)
         Log.info { "#{tag} で起動したことを確かめた" }
         return RunResult.new(RunOutcome::Restarted, tag)
@@ -268,6 +274,7 @@ module Update
     end
 
     private def roll_back(tag : String) : RunResult
+      progress(Phase::RollingBack)
       reject(tag)
       unless @installer.rollback
         Log.error { "#{tag} から戻せなかった。実行ファイルを入れ直す必要がある" }
@@ -294,6 +301,33 @@ module Update
       @state.save(state)
     rescue exception
       Log.error(exception: exception) { "戻した版 #{tag} を記録できなかった" }
+    end
+
+    # 今の段階を残す。設定画面が読む。
+    # 残せなくても投げない。見せるための記録であり、更新そのものを止める理由にはならない。
+    private def progress(phase : Phase) : Nil
+      state = @state.load
+      state.progress = Progress.new(phase, Process.pid.to_i64, @clock.now)
+      @state.save(state)
+    rescue exception
+      Log.warn(exception: exception) { "更新の段階を記録できなかった" }
+    end
+
+    # 段階を消し、結末を残す。設定と間隔のために何もしなかった回は結末を残さない。
+    # タイマーは 30 分ごとに起きるため、残すと前の結末がすぐ見えなくなる。
+    # 途中で例外が上がって result が無いときも、段階だけは消す。
+    private def finish(result : RunResult?) : Nil
+      state = @state.load
+      had_progress = !state.progress.nil?
+      state.progress = nil
+      if result && !(result.outcome.disabled? || result.outcome.not_due?)
+        state.last_run = LastRun.new(result.outcome.to_s.underscore, result.tag, @clock.now)
+      elsif !had_progress
+        return
+      end
+      @state.save(state)
+    rescue exception
+      Log.warn(exception: exception) { "更新の結末を記録できなかった" }
     end
 
     private def from_check(outcome : Outcome) : RunOutcome

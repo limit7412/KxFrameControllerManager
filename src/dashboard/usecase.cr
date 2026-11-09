@@ -32,6 +32,10 @@ module Dashboard
     property disconnect : Proc(Array(PowerOff::Hand), Array(PowerOff::Result)?) = ->(_hands : Array(PowerOff::Hand)) { nil.as(Array(PowerOff::Result)?) }
     # 長押しに割り当てられるボタン。
     property buttons : Hash(PowerOff::Hand, Array(String)) = {} of PowerOff::Hand => Array(String)
+    # 新しい版があるかだけを見る。check の結末の名前（up_to_date、available など）と、見つけた版を返す。
+    property check_update : Proc({String, String?}) = -> { {"unknown", nil.as(String?)} }
+    # 今すぐの更新を、常駐とは別のユニットで始める。始められたら真を返す。
+    property start_update : Proc(Bool) = -> { false }
     # 描画先を作る。libcairo が無ければ nil を返す。
     property canvas_factory : Proc(Int32, Int32, Canvas?) = ->(_w : Int32, _h : Int32) { nil.as(Canvas?) }
 
@@ -104,8 +108,11 @@ module Dashboard
       when "tab"
         @state.tab = Tab.parse(rest)
         @state.message = nil
+        @state.update_message = nil
       when "disconnect"
         press_disconnect(rest, now)
+      when "update"
+        rest == "run" ? press_update(now) : check_for_update
       when "set"
         key, _, direction = rest.rpartition(':')
         change(key, direction.to_i)
@@ -232,6 +239,56 @@ module Dashboard
       @state.armed = nil
       @armed_at = nil
       @dirty = true
+    end
+
+    # 今すぐの更新も 2 回押しで動かす。常駐が再起動してタブが一度消えるためである。
+    #
+    # 更新は常駐の中では行わず、systemd の別のユニットで `update` を走らせる。
+    # 常駐の中から自分を再起動すると、新しい版の起動を確かめる者がいなくなる（自動更新と同じ理由）。
+    private def press_update(now : Time::Instant) : Nil
+      expire_arm(now)
+      unless @state.armed == "update"
+        @state.armed = "update"
+        @armed_at = now
+        @state.update_message = nil
+        return
+      end
+
+      @state.armed = nil
+      @armed_at = nil
+      if @start_update.call
+        @state.update_message = @view.t("dashboard.update.started")
+        @state.update_tone = Tone::Info
+      else
+        @state.update_message = @view.t("dashboard.update.start_failed")
+        @state.update_tone = Tone::Error
+      end
+      @last_status = nil
+    end
+
+    # GitHub への問い合わせは数秒かかりうる。主ループを止めないよう別のファイバで行う。
+    private def check_for_update : Nil
+      return if @state.checking?
+      @state.checking = true
+      @state.update_message = nil
+      spawn(name: "dashboard_check_update") do
+        begin
+          outcome, tag = @check_update.call
+          @state.update_message = @view.t("dashboard.update.check.#{outcome}", {"tag" => tag || ""})
+          @state.update_tone = case outcome
+                               when "available"  then Tone::Ok
+                               when "up_to_date" then Tone::Info
+                               else                   Tone::Warn
+                               end
+        rescue exception
+          Log.error(exception: exception) { "設定画面からの更新の確認に失敗した" }
+          @state.update_message = @view.t("dashboard.update.check.unreachable", {"tag" => ""})
+          @state.update_tone = Tone::Warn
+        ensure
+          @state.checking = false
+          @dirty = true
+        end
+      end
     end
 
     private def finish_disconnect(results : Array(PowerOff::Result)?) : Nil

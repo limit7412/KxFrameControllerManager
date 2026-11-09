@@ -1,4 +1,5 @@
 require "../spec_helper"
+require "../../src/update/auto_updater"
 
 private BUTTONS = {
   PowerOff::Hand::Left  => SteamVR::Bindings::LEFT_BUTTONS,
@@ -61,8 +62,22 @@ describe Dashboard::Editor do
     apply(root, "power_off.warn_ms").power_off.warn_ms.should eq 1500
   end
 
+  it "自動更新の間隔は決まった段を順に動き、段の間の値からは押した向きの段へ移る" do
+    root = Config::Root.default
+    apply(root, "update.check_interval_h").update.check_interval_h.should eq 12
+    apply(root, "update.check_interval_h", -1).update.check_interval_h.should eq 3
+    root.update.check_interval_h = 5
+    apply(root, "update.check_interval_h").update.check_interval_h.should eq 6
+    apply(root, "update.check_interval_h", -1).update.check_interval_h.should eq 3
+    root.update.check_interval_h = 168
+    apply(root, "update.check_interval_h").update.check_interval_h.should eq 168
+    root.update.check_interval_h = 1
+    apply(root, "update.check_interval_h", -1).update.check_interval_h.should eq 1
+  end
+
   it "どの操作の結果も config の検証を通る" do
     usecase = Config::Usecase.new(Fakes::ConfigRepository.new)
+    usecase.register_validator("update") { |checked| Update.validate(checked.update) }
     root = Config::Root.default
     root.power_off.hold_ms = 500
     root.power_off.warn_ms = 0
