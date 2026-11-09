@@ -5,6 +5,23 @@ module Dashboard
   # 片手ぶんの状態。
   record HandStatus, connected : Bool, serial : String?, button : String
 
+  # 更新の状態。自動更新が状態のファイルへ残したものの写しである。
+  record UpdateStatus,
+    # 走っている実行ファイルの版。
+    version : String,
+    # 最後に GitHub Releases を確かめた時刻。
+    last_checked_at : Time?,
+    # 最後に走った更新の結末（RunOutcome の名前を小文字とアンダースコアにしたもの）と、その版と時刻。
+    last_outcome : String?,
+    last_tag : String?,
+    last_finished_at : Time?,
+    # 走っている更新の段階（Phase の名前を小文字とアンダースコアにしたもの）。走っていなければ nil。
+    phase : String?,
+    # 常駐が systemd のユニットとして入っているか。入っていなければ、画面からの更新は再起動ができない。
+    service_installed : Bool,
+    # 置き換える実行ファイルのパス。戻せなかったときの文言に使う。
+    executable : String
+
   # 画面へ見せる常駐の状態。組み立てたときの値の写しである。
   # 前回と比べて変わったときだけ描き直すため、値として比べられる record にしてある。
   record Snapshot,
@@ -20,7 +37,8 @@ module Dashboard
     # HMD の明るさの範囲。読めなければ nil。
     gain_range : {Float64, Float64}?,
     # 最後に読んだ設定ファイルの誤り。
-    config_errors : Array(String) do
+    config_errors : Array(String),
+    update : UpdateStatus do
     def hand(hand : PowerOff::Hand) : HandStatus
       hand.left? ? left : right
     end
@@ -43,7 +61,7 @@ module Dashboard
   #
   # 値の範囲は config の検証（仕様書 6.1 節）に合わせ、画面からは範囲外の値を作れないようにする。
   # 範囲外を作ってから保存で弾くと、押したのに何も変わらないように見える。
-  # 画面から変えないもの（ui、steamvr、frame_link、update など）はここに載せない。
+  # 画面から変えないもの（dashboard、steamvr、frame_link、update.channel など）はここに載せない。
   module Editor
     FIELDS = {
       "power_off.enabled"              => Field.new("power_off.enabled", FieldKind::Toggle),
@@ -61,7 +79,13 @@ module Dashboard
       "power_save.brightness"          => Field.new("power_save.brightness", FieldKind::Toggle),
       "power_save.brightness_gain"     => Field.new("power_save.brightness_gain", FieldKind::Stepper, 0.05, 0.05, 3.0),
       "power_save.performance_profile" => Field.new("power_save.performance_profile", FieldKind::Toggle),
+      "update.auto_update"             => Field.new("update.auto_update", FieldKind::Toggle),
+      "update.check_interval_h"        => Field.new("update.check_interval_h", FieldKind::Stepper, 1.0, 1.0, 168.0),
     }
+
+    # 自動更新の間隔（時間）の段。1 時間ずつでは 168 時間まで遠いため、決まった段を順に動く。
+    # 設定ファイルで段の間の値にしてあれば、押した向きにある最も近い段へ移る。
+    CHECK_INTERVALS_H = [1, 2, 3, 6, 12, 24, 48, 72, 168]
 
     # 予告の振動から切断までに空ける最小の時間。config の検証と同じ値である（仕様書 7.1 節）。
     MIN_WARN_TO_HOLD_MS = 500
@@ -87,6 +111,10 @@ module Dashboard
         next_root.power_save.brightness = !root.power_save.brightness
       when "power_save.performance_profile"
         next_root.power_save.performance_profile = !root.power_save.performance_profile
+      when "update.auto_update"
+        next_root.update.auto_update = !root.update.auto_update
+      when "update.check_interval_h"
+        next_root.update.check_interval_h = step_interval(root.update.check_interval_h, direction)
       when "input.left_button"
         next_root.input.left_button = cycle(buttons[PowerOff::Hand::Left], root.input.left_button, direction)
       when "input.right_button"
@@ -129,6 +157,14 @@ module Dashboard
       value = round(current + field.step * direction)
       return nil if value <= min
       round(Math.min(value, max))
+    end
+
+    private def self.step_interval(current : Int32, direction : Int32) : Int32
+      if direction > 0
+        CHECK_INTERVALS_H.find { |value| value > current } || CHECK_INTERVALS_H.last
+      else
+        CHECK_INTERVALS_H.reverse.find { |value| value < current } || CHECK_INTERVALS_H.first
+      end
     end
 
     private def self.step(value : Number, field : Field, direction : Int32) : Float64

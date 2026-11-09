@@ -10,6 +10,8 @@ module Dashboard
     Hold
     # 振動と省電力。
     Power
+    # 自動更新。
+    Update
   end
 
   # 知らせの色分け。
@@ -22,8 +24,9 @@ module Dashboard
 
   # 押せる場所 1 つ。action は usecase が読み分ける綴りである。
   #
-  # - "tab:hold" / "tab:power"
+  # - "tab:hold" / "tab:power" / "tab:update"
   # - "disconnect:left" / "disconnect:right" / "disconnect:both"
+  # - "update:check"（新しい版があるかだけを見る） / "update:run"（今すぐ更新する）
   # - "set:<セクション.キー>:<+1 か -1>"（Toggle は +1 だけ）
   record Hit, x : Float64, y : Float64, w : Float64, h : Float64, action : String do
     def contains?(px : Float64, py : Float64) : Bool
@@ -35,7 +38,7 @@ module Dashboard
   class ViewState
     property tab : Tab = Tab::Hold
     property snapshot : Snapshot? = nil
-    # 1 回目を押して確かめ待ちの切断の対象（left / right / both）。
+    # 1 回目を押して確かめ待ちの対象（left / right / both、または今すぐの更新の update）。
     property armed : String? = nil
     # 切断を処理しているか。
     property? running : Bool = false
@@ -43,6 +46,17 @@ module Dashboard
     property tone : Tone = Tone::Info
     # ボタンを変えて、まだ SteamVR に読ませていないか。
     property? rebind_pending : Bool = false
+    # 新しい版があるかを見ているか。
+    property? checking : Bool = false
+    # 更新のタブに出す知らせ。切断の知らせとは別に持つ。
+    property update_message : String? = nil
+    property update_tone : Tone = Tone::Info
+    # 画面の「更新を確認」で確かめられた時刻。
+    #
+    # 自動更新の状態の last_checked_at には書かない。あれは自動更新の間隔を数える起点であり、
+    # 画面で確かめたせいで、見つけた版の自動での置き換えが間隔ぶん遅れないようにするためである。
+    # 表示ではどちらか新しいほうを「最後の確認」に出す。
+    property checked_at : Time? = nil
   end
 
   # 画面を描き、押せる場所の一覧を返す。
@@ -66,8 +80,9 @@ module Dashboard
     BUTTON     = Color.hex(0x2a2f39)
 
     # 右の列の設定の並び。
-    HOLD_FIELDS  = %w[power_off.enabled input.left_button input.right_button power_off.hold_ms power_off.warn_ms power_off.cooldown_ms power_off.target input.priority]
-    POWER_FIELDS = %w[feedback.haptics feedback.amplitude power_save.enabled power_save.delay_s power_save.brightness power_save.brightness_gain power_save.performance_profile]
+    HOLD_FIELDS   = %w[power_off.enabled input.left_button input.right_button power_off.hold_ms power_off.warn_ms power_off.cooldown_ms power_off.target input.priority]
+    POWER_FIELDS  = %w[feedback.haptics feedback.amplitude power_save.enabled power_save.delay_s power_save.brightness power_save.brightness_gain power_save.performance_profile]
+    UPDATE_FIELDS = %w[update.auto_update update.check_interval_h]
 
     LEFT_X       =  24.0
     LEFT_W       = 380.0
@@ -98,10 +113,15 @@ module Dashboard
       status(canvas, state.snapshot)
       disconnect(canvas, state, hits)
       tabs(canvas, state.tab, hits)
-      fields = state.tab.hold? ? HOLD_FIELDS : POWER_FIELDS
+      fields = case state.tab
+               in .hold?   then HOLD_FIELDS
+               in .power?  then POWER_FIELDS
+               in .update? then UPDATE_FIELDS
+               end
       fields.each_with_index do |key, index|
         row(canvas, root, state.snapshot, key, FIELDS_TOP + index * ROW_H, hits)
       end
+      update_panel(canvas, state, root, hits) if state.tab.update?
       footer(canvas, state)
       hits
     end
@@ -182,7 +202,7 @@ module Dashboard
     end
 
     private def tabs(canvas : Canvas, current : Tab, hits : Array(Hit)) : Nil
-      width = RIGHT_W / 2
+      width = RIGHT_W / Tab.values.size
       Tab.each do |tab|
         x = RIGHT_X + tab.value * width
         selected = tab == current
@@ -233,8 +253,9 @@ module Dashboard
         canvas.text(RIGHT_X + 8, y + 22, wrap(canvas, errors.first, RIGHT_W - 16, SMALL_SIZE).first, SMALL_SIZE, NG)
       elsif state.rebind_pending?
         canvas.text(RIGHT_X + 8, y, t("dashboard.rebind_pending"), SMALL_SIZE, WARN)
-      elsif state.tab.hold?
-        wrap(canvas, t("dashboard.binding_note"), RIGHT_W - 16, SMALL_SIZE).first(2).each_with_index do |line, index|
+      elsif state.tab.hold? || state.tab.update?
+        note = state.tab.hold? ? "dashboard.binding_note" : "dashboard.update.note"
+        wrap(canvas, t(note), RIGHT_W - 16, SMALL_SIZE).first(2).each_with_index do |line, index|
           canvas.text(RIGHT_X + 8, y + index * 22, line, SMALL_SIZE, MUTED)
         end
       else
@@ -250,6 +271,7 @@ module Dashboard
       when "power_save.enabled"             then root.power_save.enabled.to_s
       when "power_save.brightness"          then root.power_save.brightness.to_s
       when "power_save.performance_profile" then root.power_save.performance_profile.to_s
+      when "update.auto_update"             then root.update.auto_update.to_s
       else                                       ""
       end
     end
@@ -257,21 +279,97 @@ module Dashboard
     # 設定の値を、画面に出す文字列にする。
     private def display(root : Config::Root, snapshot : Snapshot?, key : String) : String
       case key
-      when "input.left_button"     then t("dashboard.button.#{root.input.left_button}")
-      when "input.right_button"    then t("dashboard.button.#{root.input.right_button}")
-      when "power_off.hold_ms"     then t("dashboard.milliseconds", {"value" => root.power_off.hold_ms.to_s})
-      when "power_off.warn_ms"     then t("dashboard.milliseconds", {"value" => root.power_off.warn_ms.to_s})
-      when "power_off.cooldown_ms" then t("dashboard.milliseconds", {"value" => root.power_off.cooldown_ms.to_s})
-      when "power_off.target"      then t("dashboard.target.#{root.power_off.target.to_s.underscore}")
-      when "input.priority"        then t("dashboard.priority.#{root.input.priority.to_s.underscore}")
-      when "feedback.amplitude"    then "%.2f" % root.feedback.amplitude
-      when "power_save.delay_s"    then t("dashboard.seconds", {"value" => root.power_save.delay_s.to_s})
+      when "input.left_button"       then t("dashboard.button.#{root.input.left_button}")
+      when "input.right_button"      then t("dashboard.button.#{root.input.right_button}")
+      when "power_off.hold_ms"       then t("dashboard.milliseconds", {"value" => root.power_off.hold_ms.to_s})
+      when "power_off.warn_ms"       then t("dashboard.milliseconds", {"value" => root.power_off.warn_ms.to_s})
+      when "power_off.cooldown_ms"   then t("dashboard.milliseconds", {"value" => root.power_off.cooldown_ms.to_s})
+      when "power_off.target"        then t("dashboard.target.#{root.power_off.target.to_s.underscore}")
+      when "input.priority"          then t("dashboard.priority.#{root.input.priority.to_s.underscore}")
+      when "feedback.amplitude"      then "%.2f" % root.feedback.amplitude
+      when "power_save.delay_s"      then t("dashboard.seconds", {"value" => root.power_save.delay_s.to_s})
+      when "update.check_interval_h" then t("dashboard.hours", {"value" => root.update.check_interval_h.to_s})
       when "power_save.brightness_gain"
         gain = root.power_save.brightness_gain
         gain ? "%.2f" % gain : t("dashboard.gain_auto")
       else
         ""
       end
+    end
+
+    # 更新のタブの下半分。版と最後の確認、今の段階か最後の結末、2 つのボタン、知らせを並べる。
+    private def update_panel(canvas : Canvas, state : ViewState, root : Config::Root, hits : Array(Hit)) : Nil
+      top = FIELDS_TOP + UPDATE_FIELDS.size * ROW_H + 12
+      canvas.fill_rect(RIGHT_X, top, RIGHT_W, 300.0, PANEL, 14.0)
+      update = state.snapshot.try(&.update)
+      return canvas.text(RIGHT_X + 20, top + 32, t("dashboard.loading"), BODY_SIZE, MUTED) unless update
+
+      last_checked = [update.last_checked_at, state.checked_at].compact.max?
+      checked = last_checked.try { |time| format_time(time) } || t("dashboard.update.never")
+      info = [
+        {t("dashboard.update.version"), update.version, TEXT},
+        {t("dashboard.update.last_checked"), checked, TEXT},
+      ]
+      phase = update.phase
+      if phase
+        info << {t("dashboard.update.state"), t("dashboard.update.phase.#{phase}"), ACCENT}
+      elsif outcome = update.last_outcome
+        vars = {"version" => update.version, "tag" => update.last_tag || "", "path" => update.executable}
+        info << {t("dashboard.update.state"), t("update.#{outcome}", vars), outcome_color(outcome)}
+      end
+
+      y = top + 30
+      info.each do |(label, value, color)|
+        canvas.text(RIGHT_X + 20, y, label, BODY_SIZE, MUTED)
+        lines = wrap(canvas, value, RIGHT_W - 200, SMALL_SIZE).first(2)
+        if lines.size == 1 && canvas.text_width(value, BODY_SIZE) <= RIGHT_W - 200
+          canvas.text(RIGHT_X + 180, y, value, BODY_SIZE, color)
+          y += 40
+        else
+          lines.each_with_index { |line, index| canvas.text(RIGHT_X + 180, y + index * 22, line, SMALL_SIZE, color) }
+          y += 22 * lines.size + 18
+        end
+      end
+
+      busy = !phase.nil? || state.checking?
+      buttons_top = top + 176
+      width = (RIGHT_W - 40 - 12) / 2
+      check_x = RIGHT_X + 20
+      run_x = check_x + width + 12
+      can_run = !busy && update.service_installed
+      canvas.fill_rect(check_x, buttons_top, width, 56.0, BUTTON, 10.0)
+      canvas.stroke_rect(check_x, buttons_top, width, 56.0, busy ? LINE : ACCENT, 10.0, 2.0)
+      canvas.text(check_x + width / 2, buttons_top + 28, t(state.checking? ? "dashboard.update.checking" : "dashboard.update.check"), BODY_SIZE, busy ? MUTED : TEXT, align: Align::Center)
+      hits << Hit.new(check_x, buttons_top, width, 56.0, "update:check") unless busy
+
+      armed = state.armed == "update"
+      canvas.fill_rect(run_x, buttons_top, width, 56.0, armed ? ACCENT : BUTTON, 10.0)
+      canvas.stroke_rect(run_x, buttons_top, width, 56.0, can_run ? ACCENT : LINE, 10.0, 2.0)
+      label = armed ? t("dashboard.update.confirm") : t("dashboard.update.run")
+      canvas.text(run_x + width / 2, buttons_top + 28, label, armed ? SMALL_SIZE : BODY_SIZE, armed ? BACKGROUND : (can_run ? TEXT : MUTED), bold: armed, align: Align::Center)
+      hits << Hit.new(run_x, buttons_top, width, 56.0, "update:run") if can_run
+
+      message = state.update_message || (update.service_installed ? nil : t("dashboard.update.not_installed"))
+      color = state.update_message ? tone_color(state.update_tone) : WARN
+      if message
+        wrap(canvas, message, RIGHT_W - 40, SMALL_SIZE).first(2).each_with_index do |line, index|
+          canvas.text(RIGHT_X + 20, buttons_top + 82 + index * 22, line, SMALL_SIZE, color)
+        end
+      end
+    end
+
+    private def outcome_color(outcome : String) : Color
+      case outcome
+      when "restarted", "applied", "up_to_date"                     then OK
+      when "rolled_back", "rejected", "unknown", "busy"             then WARN
+      when "failed", "rollback_failed", "unreachable", "incomplete" then NG
+      else                                                               MUTED
+      end
+    end
+
+    # 時刻は利用者の地域の時刻で、年月日と時分だけを出す。
+    private def format_time(time : Time) : String
+      time.to_local.to_s("%Y-%m-%d %H:%M")
     end
 
     private def tone_color(tone : Tone) : Color
@@ -288,7 +386,8 @@ module Dashboard
     private def wrap(canvas : Canvas, text : String, width : Float64, size : Float64) : Array(String)
       lines = [] of String
       text.split('\n').each do |paragraph|
-        units = paragraph.ascii_only? ? paragraph.split(' ').map_with_index { |word, i| i.zero? ? word : " #{word}" } : paragraph.chars.map(&.to_s)
+        # 日本語の中の英数字（版やパス）は切らずに 1 つとして扱う。「1.2.」と「3」に分かれると読み違える。
+        units = paragraph.ascii_only? ? paragraph.split(' ').map_with_index { |word, i| i.zero? ? word : " #{word}" } : paragraph.scan(/[!-~]+|./).map(&.[0])
         current = ""
         units.each do |unit|
           candidate = current + unit
