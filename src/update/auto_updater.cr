@@ -1,6 +1,6 @@
 require "log"
 
-require "../config/models"
+require "../config/usecase"
 require "./installer"
 require "./models"
 require "./repository"
@@ -344,10 +344,10 @@ module Update
   # update セクションの範囲（仕様書 6.1 節）。Config::Usecase#register_validator で登録する。
   CHECK_INTERVAL_H_RANGE = 1..168
 
-  def self.validate(section : Config::UpdateSection) : Array(String)
-    errors = [] of String
+  def self.validate(section : Config::UpdateSection) : Array(Config::Problem)
+    errors = [] of Config::Problem
     unless CHECK_INTERVAL_H_RANGE.includes?(section.check_interval_h)
-      errors << "check_interval_h は #{CHECK_INTERVAL_H_RANGE.begin} から #{CHECK_INTERVAL_H_RANGE.end} の範囲で指定する"
+      errors << Config::Usecase.range_problem("check_interval_h", CHECK_INTERVAL_H_RANGE)
     end
     errors
   end

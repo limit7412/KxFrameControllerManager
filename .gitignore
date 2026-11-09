@@ -11,3 +11,6 @@
 
 # scripts/package.sh が作る配布用の tar.gz
 /KxFrameControllerManager-*.tar.gz
+
+# scripts/preview_dashboard.cr が描き出す設定画面の見本
+/tmp/

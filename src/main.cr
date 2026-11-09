@@ -12,6 +12,7 @@ require "./runtime/i18n"
 require "./runtime/logging"
 require "./runtime/paths"
 require "./runtime/scheduler"
+require "./runtime/steam_client"
 require "./runtime/systemd"
 require "./steamvr/bindings"
 require "./steamvr/device_repository"
@@ -45,6 +46,37 @@ module KxFrameControllerManager
   }
 
   BINDINGS_FILE = "bindings_frame_controller.json"
+  ACTIONS_FILE  = "actions.json"
+
+  # 設定 language から使う言語を決める。auto なら Steam の表示言語と環境変数から決める。
+  def self.resolve_locale(setting : String) : String
+    steam = setting == Runtime::I18n::AUTO ? Runtime::SteamClient.language : nil
+    Runtime::I18n.resolve(setting, ENV, steam)
+  end
+
+  # 設定の検証の誤りを、今の言語の文にする。
+  def self.describe(error : Config::ValidationError) : String
+    error.localize(->(key : String, vars : Hash(String, String)) { Runtime::I18n.t(key, vars) })
+  end
+
+  # 全言語の辞書から、SteamVR へ渡す文字列の表を作る。
+  # SteamVR は Steam の表示言語に合う札の文字列を選ぶため、今の言語に依らず全言語ぶんを渡す。
+  def self.steamvr_descriptions : Hash(String, String)
+    Runtime::I18n::CODES.to_h do |code|
+      {Runtime::I18n.steamvr_tag(code).downcase, Runtime::I18n.t_in(code, "steamvr.description")}
+    end
+  end
+
+  def self.action_localization : Array(Hash(String, String))
+    Runtime::I18n::CODES.map do |code|
+      {
+        "language_tag"                => Runtime::I18n.steamvr_tag(code),
+        "/actions/kxfcm"              => Runtime::I18n.t_in(code, "steamvr.action_set"),
+        "/actions/kxfcm/in/power_off" => Runtime::I18n.t_in(code, "steamvr.action.power_off"),
+        "/actions/kxfcm/out/haptic"   => Runtime::I18n.t_in(code, "steamvr.action.haptic"),
+      }
+    end
+  end
 
   # 常駐と CLI の両方で使う部品の組み立て。
   class Parts
@@ -69,6 +101,7 @@ module KxFrameControllerManager
         Runtime::Paths.action_manifest_path,
       )
       @steamvr.action_files = action_files(root.input)
+      @steamvr.descriptions = KxFrameControllerManager.steamvr_descriptions
 
       @actions = SteamVR::InputActions.new(@openvr, Runtime::Paths.action_manifest_path)
       @devices = SteamVR::DeviceRepository.new(@openvr)
@@ -117,6 +150,7 @@ module KxFrameControllerManager
     private def action_files(input : Config::InputSection) : Hash(String, String)
       ACTION_FILES.to_h do |name, content|
         content = SteamVR::Bindings.render(content, input) if name == BINDINGS_FILE
+        content = SteamVR::Bindings.localize(content, KxFrameControllerManager.action_localization) if name == ACTIONS_FILE
         {File.join(Runtime::Paths.actions_directory, name), content}
       end
     end
@@ -146,7 +180,7 @@ module KxFrameControllerManager
       @scheduler = Runtime::Scheduler.new(@parts.steamvr, @errors)
       # 最後に 27062 の疎通を確かめた結果と、最後に読んだ設定の誤り。設定画面へ見せる。
       @link_reachable = nil.as(Bool?)
-      @config_errors = [] of String
+      @config_errors = [] of Config::ValidationError
       @dashboard = build_dashboard
       wire
 
@@ -155,6 +189,8 @@ module KxFrameControllerManager
       @reload_requested = false
       # 27062 の疎通を確かめた接続の番号。つながるたびに 1 回だけ確かめる（仕様書 4.2 節）。
       @probed_generation = nil.as(Int32?)
+      # 言語を決め直した接続の番号。Steam の表示言語は SteamVR を起動し直さないと変わらないため、つながるたびに見る。
+      @locale_generation = nil.as(Int32?)
     end
 
     def run : Int32
@@ -192,6 +228,7 @@ module KxFrameControllerManager
         end
       end
       @scheduler.on_tick = ->(now : Time::Instant) do
+        refresh_locale
         probe_link
         @errors.guard("error.power_off") { parts.power_off.tick(now) }
         @errors.guard("error.power_save") { parts.power_save.tick(parts.any_controller_connected?, now) }
@@ -223,7 +260,9 @@ module KxFrameControllerManager
     private def build_dashboard : Dashboard::Usecase
       parts = @parts
       translate = ->(key : String, vars : Hash(String, String)) { Runtime::I18n.t(key, vars) }
-      dashboard = Dashboard::Usecase.new(parts.openvr, @config, Dashboard::View.new(translate, VERSION))
+      names = Runtime::I18n::CODES.to_h { |code| {code, Runtime::I18n.native_name(code)} }
+      dashboard = Dashboard::Usecase.new(parts.openvr, @config, Dashboard::View.new(translate, VERSION, names))
+      dashboard.languages = Runtime::I18n.settings
       dashboard.buttons = PowerOff::Hand.values.to_h { |hand| {hand, SteamVR::Bindings.buttons(hand)} }
       dashboard.status = -> { snapshot }
       dashboard.disconnect = ->(hands : Array(PowerOff::Hand)) { parts.power_off.manual(hands) }
@@ -255,7 +294,7 @@ module KxFrameControllerManager
         power_save_state: parts.power_save.state.to_s.underscore,
         power_save_pending: File.exists?(Runtime::Paths.power_save_state_path),
         gain_range: connected ? parts.settings.gain_range : nil,
-        config_errors: @config_errors,
+        config_errors: @config_errors.map { |error| KxFrameControllerManager.describe(error) },
         update: update_status,
       )
     end
@@ -279,6 +318,23 @@ module KxFrameControllerManager
         service_installed: File.exists?(Runtime::Paths.systemd_unit_path),
         executable: Runtime::Paths.executable_path,
       )
+    end
+
+    # つながるたびに、設定が auto なら言語を決め直す。
+    # Steam の表示言語を変えると Steam ごと SteamVR が起動し直すため、つなぎ直した時点で読めば追いつく。
+    private def refresh_locale : Nil
+      generation = @parts.openvr.generation
+      return if @locale_generation == generation
+      @locale_generation = generation
+      apply_locale(@config.current.language)
+    end
+
+    private def apply_locale(setting : String) : Nil
+      locale = KxFrameControllerManager.resolve_locale(setting)
+      return if locale == Runtime::I18n.locale
+      Runtime::I18n.locale = locale
+      Log.info { "表示言語を #{locale} にする" }
+      @dashboard.invalidate
     end
 
     # つながるたびに 27062 から一覧を取り、疎通を確かめる。
@@ -337,21 +393,21 @@ module KxFrameControllerManager
 
       # 読めなかったとき、usecase は既定値で動き、on_apply を呼ばない。既定値を自分で反映する。
       apply(@config.current)
-      @config_errors = errors.map(&.to_s)
+      @config_errors = errors
       STDERR.puts Runtime::I18n.t("cli.config_invalid")
-      errors.each { |error| STDERR.puts "  #{error}" }
+      errors.each { |error| STDERR.puts "  #{KxFrameControllerManager.describe(error)}" }
     end
 
     private def reload_config : Nil
       @reload_requested = false
-      @errors.guard("error.config_reload") { @config_errors = @config.reload.map(&.to_s) }
+      @errors.guard("error.config_reload") { @config_errors = @config.reload }
     end
 
     # 検証を通った設定を反映する。反映できた時点で、設定ファイルの誤りは解消している。
     private def apply(root : Config::Root) : Nil
-      @config_errors = [] of String
+      @config_errors = [] of Config::ValidationError
       Runtime::Logging.setup(@backends, root.log_level)
-      Runtime::I18n.locale = Runtime::I18n.resolve(root.language)
+      apply_locale(root.language)
       @parts.apply(root)
       @scheduler.retry_interval = root.steamvr.retry_interval_s.seconds
       @scheduler.poll_interval = root.input.poll_interval_ms.milliseconds
@@ -381,7 +437,7 @@ module KxFrameControllerManager
       @root = read_config
       level = %w[trace debug].includes?(@root.log_level) ? @root.log_level : "warn"
       Runtime::Logging.setup([Runtime::StderrBackend.new] of ::Log::Backend, level)
-      Runtime::I18n.locale = Runtime::I18n.resolve(@root.language)
+      Runtime::I18n.locale = KxFrameControllerManager.resolve_locale(@root.language)
     end
 
     def t(key : String, vars = {} of String => String) : String
@@ -396,7 +452,7 @@ module KxFrameControllerManager
           PowerOff::Hand.each do |hand|
             serial = parts.devices.serial(hand)
             state = parts.devices.connected?(hand) ? t("status.connected") : t("status.not_connected")
-            puts t("status.hand", {"hand" => hand.label, "serial" => serial || "-", "state" => state})
+            puts t("status.hand", {"hand" => hand_name(hand), "serial" => serial || "-", "state" => state})
           end
         else
           puts t("status.steamvr_unavailable")
@@ -409,7 +465,7 @@ module KxFrameControllerManager
           if parts.steamvr.connected?
             PowerOff::Hand.each do |hand|
               matched = parts.power_off.resolve([hand], list).size == 1
-              puts t(matched ? "status.match_ok" : "status.match_ng", {"hand" => hand.label})
+              puts t(matched ? "status.match_ok" : "status.match_ng", {"hand" => hand_name(hand)})
             end
           end
         else
@@ -465,7 +521,7 @@ module KxFrameControllerManager
         results = power_off.execute(targets)
         running = false
         results.each do |result|
-          puts t("disconnect.#{result.outcome.to_s.underscore}", {"target" => result.target.label, "serial" => result.target.serial})
+          puts t("disconnect.#{result.outcome.to_s.underscore}", {"target" => result.target.hand.try { |hand| hand_name(hand) } || result.target.serial, "serial" => result.target.serial})
         end
         results.all?(&.outcome.disconnected?) ? 0 : 1
       end
@@ -547,12 +603,17 @@ module KxFrameControllerManager
       end
     end
 
+    # 手の名前。引数の綴り（left、right）ではなく、今の言語の名前で出す。
+    private def hand_name(hand : PowerOff::Hand) : String
+      t("dashboard.hand.#{hand.label}")
+    end
+
     private def print_list(list : PowerOff::ControllerList) : Nil
       if list.connected.empty?
         puts t("list.no_connected")
       else
         list.connected.each do |controller|
-          puts t("list.connected", {"serial" => controller.serial, "hand" => controller.hand.try(&.label) || "?"})
+          puts t("list.connected", {"serial" => controller.serial, "hand" => controller.hand.try { |hand| hand_name(hand) } || "?"})
         end
       end
       list.paired.reject { |serial| list.connected?(serial) }.each do |serial|
@@ -568,8 +629,9 @@ module KxFrameControllerManager
       root = repository.load
       errors = KxFrameControllerManager.config_usecase(repository).validate(root)
       return root if errors.empty?
+      # この時点の言語は環境変数から決めたものである。設定の language は誤りを含むかもしれず、まだ使わない。
       STDERR.puts Runtime::I18n.t("cli.config_invalid")
-      errors.each { |error| STDERR.puts "  #{error}" }
+      errors.each { |error| STDERR.puts "  #{KxFrameControllerManager.describe(error)}" }
       @config_loaded = false
       Config::Root.default
     rescue exception : JSON::Error | File::Error
@@ -584,6 +646,8 @@ module KxFrameControllerManager
   # 常駐と CLI で同じ検証を通すため、組み立てはここだけで行う。
   def self.config_usecase(repository : Config::Repository) : Config::Usecase
     usecase = Config::Usecase.new(repository)
+    usecase.log_translate = ->(key : String, vars : Hash(String, String)) { Runtime::I18n.log_text(key, vars) }
+    usecase.register_validator(Config::ValidationError::GENERAL) { |root| Runtime::I18n.validate(root.language) }
     usecase.register_validator("input") { |root| SteamVR::Bindings.validate(root.input) }
     usecase.register_validator("update") { |root| Update.validate(root.update) }
     usecase
@@ -591,7 +655,7 @@ module KxFrameControllerManager
 
   # コマンドを解釈して実行し、終了コードを返す（仕様書 3.7 節）。
   def self.main(args : Array(String)) : Int32
-    Runtime::I18n.locale = Runtime::I18n.resolve("auto")
+    Runtime::I18n.locale = resolve_locale(Runtime::I18n::AUTO)
 
     parsed = Runtime::CLI.parse(args)
     if error = parsed.error

@@ -208,6 +208,16 @@ journalctl --user -u kx-frame-controller-manager-update
 | キー | 既定 | 範囲 | 意味 |
 | --- | --- | --- | --- |
 | `log_level` | `"info"` | `trace` / `debug` / `info` / `notice` / `warn` / `error` / `fatal` / `none` | ログの水準 |
-| `language` | `"auto"` | `auto` / `ja` / `en` | CLI の表示言語。`auto` は環境変数 `LC_ALL`、`LC_MESSAGES`、`LANG` の順に見て、日本語なら `ja`、それ以外は `en` にする |
+| `language` | `"auto"` | `auto` / `ja` / `en` / `zh-Hans` / `zh-Hant` / `ko` / `de` / `fr` / `es` / `ru` | 設定画面、CLI、SteamVR のバインド画面に出る名前の表示言語。設定画面の「全般」タブでも切り替えられる |
+
+`auto` は次の順に見て、最初に決まった言語を使う。
+
+1. Steam の表示言語（`~/.steam/registry.vdf` の `language`）。SteamVR とダッシュボードもこれに従う
+2. 環境変数 `LC_ALL`、`LC_MESSAGES`、`LANG` のうち最初に値のあるもの
+3. どちらも扱えない言語なら `en`
+
+Steam の表示言語は、常駐が SteamVR へつながるたびに読み直す。Steam で言語を変えると SteamVR ごと起動し直すため、次につながった時点で切り替わる。
+
+`ja` と `en` 以外は機械翻訳である。設定画面の「全般」タブにもそう出る。
 
 ログそのものは `language` に依らず日本語で書く。開発者が読み比べるためである。

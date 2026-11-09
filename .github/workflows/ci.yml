@@ -106,10 +106,14 @@ jobs:
           crystal: 1.19.1
 
       - name: 書式を確かめる
-        run: crystal tool format --check src spec
+        run: crystal tool format --check src spec scripts
 
       - name: 単体テストを実行する
         run: crystal spec
+
+      # 画面の見本を描き出す道具は配布物に入らず、spec からも呼ばれない。型検査だけ通しておく。
+      - name: 開発用の道具を型検査する
+        run: crystal build --no-codegen scripts/preview_dashboard.cr
 
       # 導入用の get.sh は利用者の端末で curl から直接流れるため、書き損じを先に見つける。
       # shellcheck は GitHub のランナーに入っている。

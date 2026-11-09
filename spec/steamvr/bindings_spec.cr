@@ -41,12 +41,22 @@ describe SteamVR::Bindings do
     paths.should eq ["/user/hand/left/input/view", "/user/hand/right/input/menu"]
   end
 
+  it ".localize はアクションマニフェストの localization を差し替え、ほかは保つ" do
+    template = File.read(File.join(__DIR__, "..", "..", "actions", "actions.json"))
+    entries = [{"language_tag" => "de_DE", "/actions/kxfcm/in/power_off" => "Ausschalten"}]
+    root = JSON.parse(SteamVR::Bindings.localize(template, entries))
+    root["localization"].as_a.size.should eq 1
+    root["localization"][0]["language_tag"].should eq "de_DE"
+    root["actions"].should eq JSON.parse(template)["actions"]
+  end
+
   it ".validate はその手に無いボタンを誤りにする" do
     SteamVR::Bindings.validate(Config::InputSection.new).should be_empty
     errors = SteamVR::Bindings.validate(input("system", "view"))
     errors.size.should eq 2
-    errors[0].should start_with "left_button は view / "
-    errors[1].should start_with "right_button は menu / "
+    errors[0].should eq({"config.error.choice", {"key" => "left_button", "choices" => SteamVR::Bindings.buttons(PowerOff::Hand::Left).join(" / ")}})
+    errors[1][1]["key"].should eq "right_button"
+    errors[1][1]["choices"].should start_with "menu / "
   end
 
   it "Steam ボタンとトリガーとグリップは選べない" do

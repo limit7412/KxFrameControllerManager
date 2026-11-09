@@ -22,6 +22,9 @@ module Dashboard
   #
   # 画面の組み立て（view.cr）はこの抽象だけを使う。spec では描いた内容を記録する実装へ差し替える。
   abstract class Canvas
+    # 文字に使う書体の名前。同じ漢字でも、言語によって字形の違う書体（JP、SC、TC、KR）を選ぶ。
+    property font_family : String = "Noto Sans CJK JP"
+
     abstract def width : Int32
     abstract def height : Int32
 

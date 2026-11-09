@@ -4,17 +4,39 @@ require "./models"
 require "./repository"
 
 module Config
+  # 検証の誤り 1 件の中身。文字列の辞書の鍵と、そこへ埋める値の組である。
+  alias Problem = {String, Hash(String, String)}
+
   # 検証エラー 1 件。
   # section は設定ファイルのどのセクションの誤りかを表す。ログと CLI の表示で見出しに使う。
+  # 全体に掛かる項目（log_level など）は GENERAL とする。
+  #
+  # 文言は持たず、文字列の辞書の鍵（key）と埋める値（vars）だけを持つ。
+  # 表示する側が言語を選んで localize で文にする。config は辞書を知らない。
   struct ValidationError
-    getter section : String
-    getter message : String
+    GENERAL = "general"
 
-    def initialize(@section : String, @message : String)
+    getter section : String
+    getter key : String
+    getter vars : Hash(String, String)
+
+    def initialize(@section : String, @key : String, @vars : Hash(String, String) = {} of String => String)
+    end
+
+    def self.new(section : String, problem : Problem) : self
+      new(section, problem[0], problem[1])
+    end
+
+    # translate で引いた文を、見出しを付けて返す。
+    # セクションの名前は設定ファイルの綴りのまま出す。全体に掛かる項目だけは辞書から引く。
+    def localize(translate : Proc(String, Hash(String, String), String)) : String
+      label = section == GENERAL ? translate.call("config.section.general", {} of String => String) : section
+      "#{label}: #{translate.call(key, vars)}"
     end
 
     def to_s(io : IO) : Nil
-      io << section << ": " << message
+      io << section << ": " << key
+      vars.each { |name, value| io << ' ' << name << '=' << value }
     end
   end
 
@@ -26,7 +48,6 @@ module Config
     Log = ::Log.for("config")
 
     LOG_LEVELS      = %w[trace debug info notice warn error fatal none]
-    LANGUAGES       = %w[auto ja en]
     UPDATE_CHANNELS = %w[stable test]
 
     # 範囲の決まった数値の項目（仕様書 6.1 節）。
@@ -48,18 +69,21 @@ module Config
     # composition root がスナップショットの差し替えを登録する。
     property on_apply : Proc(Root, Nil) = ->(_root : Root) { }
 
+    # 検証の誤りをログへ書くときの文の引き方。composition root が辞書を渡す。
+    property log_translate : Proc(String, Hash(String, String), String) = ->(key : String, _vars : Hash(String, String)) { key }
+
     getter current : Root
     getter repository : Repository
 
     def initialize(@repository : Repository, @current : Root = Root.default)
-      @section_validators = {} of String => Proc(Root, Array(String))
+      @section_validators = {} of String => Proc(Root, Array(Problem))
     end
 
     # セクションごとの追加の検証をコンテキストから登録する。
     #
     # 共通の範囲は validate が見る。ここで足すのは、そのコンテキストにしか分からない条件である。
     # 登録は composition root が行い、config は登録元のコンテキストを知らない。
-    def register_validator(section : String, &block : Root -> Array(String)) : Nil
+    def register_validator(section : String, &block : Root -> Array(Problem)) : Nil
       @section_validators[section] = block
     end
 
@@ -107,12 +131,12 @@ module Config
         @current = root
         @on_apply.call(@current)
       else
-        Log.error { "設定の検証に失敗したため#{fallback}: #{errors.join(" / ")}" }
+        Log.error { "設定の検証に失敗したため#{fallback}: #{errors.map(&.localize(@log_translate)).join(" / ")}" }
       end
       errors
     rescue ex : JSON::Error | File::Error
       Log.error(exception: ex) { "設定ファイルを読めなかったため#{fallback}" }
-      [ValidationError.new("全般", "設定ファイルを読めなかった: #{ex.message}")]
+      [ValidationError.new(ValidationError::GENERAL, "config.error.unreadable", {"detail" => ex.message.to_s})]
     end
 
     def validate(root : Root) : Array(ValidationError)
@@ -126,7 +150,7 @@ module Config
       validate_general(root, errors)
 
       @section_validators.each do |section, validator|
-        validator.call(root).each { |message| errors << ValidationError.new(section, message) }
+        validator.call(root).each { |problem| errors << ValidationError.new(section, problem) }
       end
       errors
     end
@@ -137,12 +161,12 @@ module Config
         errors << range_error(label, "hold_ms", HOLD_MS_RANGE)
       end
       if section.warn_ms < 0
-        errors << ValidationError.new(label, "warn_ms は 0 以上で指定する")
+        errors << ValidationError.new(label, "config.error.non_negative", {"key" => "warn_ms"})
       end
       if section.warn_ms >= section.hold_ms
-        errors << ValidationError.new(label, "warn_ms は hold_ms 未満で指定する")
+        errors << ValidationError.new(label, "config.error.warn_before_hold")
       elsif section.hold_ms - section.warn_ms < MIN_WARN_TO_HOLD_MS
-        errors << ValidationError.new(label, "hold_ms と warn_ms の差は #{MIN_WARN_TO_HOLD_MS} 以上で指定する")
+        errors << ValidationError.new(label, "config.error.warn_gap", {"min" => MIN_WARN_TO_HOLD_MS.to_s})
       end
       unless COOLDOWN_MS_RANGE.includes?(section.cooldown_ms)
         errors << range_error(label, "cooldown_ms", COOLDOWN_MS_RANGE)
@@ -159,7 +183,7 @@ module Config
       end
       # 数値なら HMD の範囲へ収めて使う。ここでは収める前の値として成り立つかだけを見る。
       if (gain = section.brightness_gain) && !positive_finite?(gain)
-        errors << ValidationError.new(label, "brightness_gain は null か 0 より大きい有限の値で指定する")
+        errors << ValidationError.new(label, "config.error.brightness_gain")
       end
     end
 
@@ -172,7 +196,7 @@ module Config
     private def validate_feedback(section : FeedbackSection, errors : Array(ValidationError)) : Nil
       amplitude = section.amplitude
       unless amplitude.finite? && 0.0 <= amplitude && amplitude <= 1.0
-        errors << ValidationError.new("feedback", "amplitude は 0.0 から 1.0 の範囲で指定する")
+        errors << ValidationError.new("feedback", "config.error.amplitude")
       end
     end
 
@@ -190,18 +214,29 @@ module Config
 
     private def validate_general(root : Root, errors : Array(ValidationError)) : Nil
       unless LOG_LEVELS.includes?(root.log_level)
-        errors << ValidationError.new("全般", "log_level は #{LOG_LEVELS.join(" / ")} のいずれかで指定する")
-      end
-      unless LANGUAGES.includes?(root.language)
-        errors << ValidationError.new("全般", "language は #{LANGUAGES.join(" / ")} のいずれかで指定する")
+        errors << choice_error(ValidationError::GENERAL, "log_level", LOG_LEVELS)
       end
       unless UPDATE_CHANNELS.includes?(root.update.channel)
-        errors << ValidationError.new("update", "channel は #{UPDATE_CHANNELS.join(" / ")} のいずれかで指定する")
+        errors << choice_error("update", "channel", UPDATE_CHANNELS)
       end
     end
 
     private def range_error(section : String, key : String, range : Range(Int32, Int32)) : ValidationError
-      ValidationError.new(section, "#{key} は #{range.begin} から #{range.end} の範囲で指定する")
+      ValidationError.new(section, Usecase.range_problem(key, range))
+    end
+
+    private def choice_error(section : String, key : String, choices : Array(String)) : ValidationError
+      ValidationError.new(section, Usecase.choice_problem(key, choices))
+    end
+
+    # 範囲を外れた数値の誤り。登録する追加の検証からも使う。
+    def self.range_problem(key : String, range : Range(Int32, Int32)) : Problem
+      {"config.error.range", {"key" => key, "min" => range.begin.to_s, "max" => range.end.to_s}}
+    end
+
+    # 決まった値のどれでもない誤り。登録する追加の検証からも使う。
+    def self.choice_problem(key : String, choices : Array(String)) : Problem
+      {"config.error.choice", {"key" => key, "choices" => choices.join(" / ")}}
     end
 
     # 大小の比較だけでは NaN を弾けない。
