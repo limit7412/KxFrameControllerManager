@@ -1,5 +1,5 @@
 require "json"
-require "../config/models"
+require "../config/usecase"
 require "../power_off/models"
 
 module SteamVR
@@ -27,14 +27,26 @@ module SteamVR
     end
 
     # input セクションのボタンの名前を確かめる。config の usecase へ登録して使う。
-    def self.validate(section : Config::InputSection) : Array(String)
-      errors = [] of String
+    def self.validate(section : Config::InputSection) : Array(Config::Problem)
+      errors = [] of Config::Problem
       PowerOff::Hand.each do |hand|
         name = button(section, hand)
         next if buttons(hand).includes?(name)
-        errors << "#{hand.label}_button は #{buttons(hand).join(" / ")} のいずれかで指定する"
+        errors << Config::Usecase.choice_problem("#{hand.label}_button", buttons(hand))
       end
       errors
+    end
+
+    # アクションマニフェストの雛形の localization を、渡した表で置き換える。
+    #
+    # 表の 1 行は SteamVR の言語の札（language_tag）と、アクションのパスごとの名前である。
+    # SteamVR のバインド画面は、Steam の表示言語に合う行の名前を出す。
+    def self.localize(template : String, entries : Array(Hash(String, String))) : String
+      root = JSON.parse(template).as_h
+      root["localization"] = JSON::Any.new(entries.map do |entry|
+        JSON::Any.new(entry.transform_values { |value| JSON::Any.new(value) })
+      end)
+      root.to_pretty_json
     end
 
     # 既定バインドの雛形の、長押しのアクションへつながる入力の場所を差し替える。

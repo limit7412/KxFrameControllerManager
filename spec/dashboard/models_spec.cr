@@ -7,7 +7,7 @@ private BUTTONS = {
 }
 
 private def apply(root : Config::Root, key : String, direction = 1, gain_range = nil) : Config::Root
-  Dashboard::Editor.apply(root, key, direction, BUTTONS, gain_range)
+  Dashboard::Editor.apply(root, key, direction, BUTTONS, gain_range, Runtime::I18n.settings)
 end
 
 describe Dashboard::Editor do
@@ -78,6 +78,7 @@ describe Dashboard::Editor do
   it "どの操作の結果も config の検証を通る" do
     usecase = Config::Usecase.new(Fakes::ConfigRepository.new)
     usecase.register_validator("update") { |checked| Update.validate(checked.update) }
+    usecase.register_validator(Config::ValidationError::GENERAL) { |checked| Runtime::I18n.validate(checked.language) }
     root = Config::Root.default
     root.power_off.hold_ms = 500
     root.power_off.warn_ms = 0
@@ -87,6 +88,18 @@ describe Dashboard::Editor do
         usecase.validate(root).should be_empty
       end
     end
+  end
+
+  it "表示言語は auto から辞書のある言語を順に巡る" do
+    root = Config::Root.default
+    seen = [] of String
+    Runtime::I18n.settings.size.times do
+      root = apply(root, "language")
+      seen << root.language
+    end
+    seen.last.should eq "auto"
+    seen.sort.should eq Runtime::I18n.settings.sort
+    apply(Config::Root.default, "language", -1).language.should eq Runtime::I18n::CODES.last
   end
 
   describe "明るさ" do

@@ -22,6 +22,15 @@ module SteamVR
     # 実行ファイルへ埋め込んだものを、vrmanifest と一緒に接続のたびに書き出す。
     property action_files : Hash(String, String) = {} of String => String
 
+    # バインド画面などに出す説明文。キーは SteamVR の言語の札（en_us、ja_jp など、小文字）である。
+    # composition root が辞書から全言語ぶんを渡す。
+    property descriptions : Hash(String, String) = DEFAULT_DESCRIPTIONS
+
+    DEFAULT_DESCRIPTIONS = {
+      "en_us" => "Turns off Steam Frame controllers with a long press.",
+      "ja_jp" => "長押しで Steam Frame のコントローラーを切断します。",
+    }
+
     def initialize(
       @repository : Repository,
       @store : ManifestStore,
@@ -37,7 +46,8 @@ module SteamVR
     # binary_path_linux は SteamVR がこのアプリをどの実行ファイルとして扱うかを示す。
     # SteamVR から起動させることはしないが、バインド画面がアプリを識別するのに要る。
     # action_manifest_path はアクションマニフェストを用意したときだけ書く。
-    def self.build_manifest(exe_path : String, action_manifest_path : String? = nil) : String
+    def self.build_manifest(exe_path : String, action_manifest_path : String? = nil,
+                            descriptions : Hash(String, String) = DEFAULT_DESCRIPTIONS) : String
       JSON.build(indent: 2) do |json|
         json.object do
           json.field "source", "builtin"
@@ -51,16 +61,12 @@ module SteamVR
                 json.field "is_dashboard_overlay", true
                 json.field "strings" do
                   json.object do
-                    json.field "en_us" do
-                      json.object do
-                        json.field "name", APP_NAME
-                        json.field "description", "Turns off Steam Frame controllers with a long press."
-                      end
-                    end
-                    json.field "ja_jp" do
-                      json.object do
-                        json.field "name", APP_NAME
-                        json.field "description", "長押しで Steam Frame のコントローラーを切断します。"
+                    descriptions.each do |tag, description|
+                      json.field tag do
+                        json.object do
+                          json.field "name", APP_NAME
+                          json.field "description", description
+                        end
                       end
                     end
                   end
@@ -101,7 +107,7 @@ module SteamVR
       return false unless @repository.opened?
 
       @action_files.each { |path, content| @store.write(path, content) }
-      @store.write(@manifest_path, self.class.build_manifest(@exe_path, @action_manifest_path))
+      @store.write(@manifest_path, self.class.build_manifest(@exe_path, @action_manifest_path, @descriptions))
       unless @repository.add_application_manifest(@manifest_path)
         Log.error { "vrmanifest の登録に失敗した: #{@manifest_path}" }
         return false
