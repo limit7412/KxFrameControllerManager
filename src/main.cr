@@ -153,7 +153,10 @@ module KxFrameControllerManager
         @errors.guard("error.power_off") { parts.power_off.tick(now) }
         @errors.guard("error.power_save") { parts.power_save.tick(parts.any_controller_connected?, now) }
       end
-      parts.steamvr.before_close = -> { @errors.guard("error.power_save") { parts.power_save.shutdown } }
+      parts.steamvr.before_close = -> do
+        parts.power_off.reset
+        @errors.guard("error.power_save") { parts.power_save.shutdown }
+      end
     end
 
     # つながるたびに 27062 から一覧を取り、疎通を確かめる。
@@ -162,6 +165,8 @@ module KxFrameControllerManager
       generation = @parts.openvr.generation
       return if @probed_generation == generation
       @probed_generation = generation
+      # 終了のイベントを受けずにつなぎ直した場合に備え、ここでも押下中の判定を捨てる。
+      @parts.power_off.reset
 
       link = @parts.link
       spawn(name: "probe_link") do
@@ -366,7 +371,10 @@ module KxFrameControllerManager
 
       systemctl = Runtime::Systemd::Systemctl.new
       if systemctl.active?
-        systemctl.run(["restart", Runtime::Systemd::UNIT_NAME])
+        unless systemctl.run(["restart", Runtime::Systemd::UNIT_NAME])
+          STDERR.puts t("update.restart_failed")
+          return 1
+        end
         puts t("update.restarted")
       end
       0

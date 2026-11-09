@@ -100,6 +100,21 @@ describe PowerOff::Usecase do
     end
   end
 
+  describe "#reset" do
+    it "押下中の判定を捨て、つなぎ直した後は押した時刻から数え直す" do
+      usecase, input, _, _, link = build
+      base = Time.instant
+      input.pressed[PowerOff::Hand::Left] = true
+      usecase.tick(base)
+      usecase.tick(base + 1500.milliseconds)
+      usecase.reset
+      usecase.tick(base + 60.seconds)
+      sleep 20.milliseconds
+
+      link.sent.should be_empty
+    end
+  end
+
   describe "#resolve" do
     it "シリアルが 27062 の接続中に無ければその手を切らない" do
       usecase, _, _, devices, _ = build

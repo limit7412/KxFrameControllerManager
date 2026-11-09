@@ -41,6 +41,8 @@ module PowerSave
       @next_recovery = nil.as(Time::Instant?)
       # 一覧を確かめている間にコントローラーがつながったら真にする。確認が終わっても入らない。
       @cancelled = false
+      # 確認のファイバの番号。shutdown の後に戻ってきた古い確認を見分けるのに使う。
+      @check_id = 0
     end
 
     def apply(@config : Config::PowerSaveSection) : Nil
@@ -91,6 +93,9 @@ module PowerSave
     # SIGTERM と VREvent_Quit のときに、OpenVR を閉じる前に呼ぶ。
     def shutdown : Nil
       leave("終了するため") if @state.active?
+      # 確認の途中なら、その結果では入らない。OpenVR を閉じた後に Active へ移ると、
+      # つなぎ直してもコントローラーがつながるまで入り直せなくなる。
+      @check_id += 1
       @state = State::Idle
       @waiting_since = nil
     end
@@ -98,10 +103,14 @@ module PowerSave
     private def start_check : Nil
       @state = State::Checking
       @cancelled = false
+      @check_id += 1
+      check_id = @check_id
       spawn(name: "power_save") do
         begin
           list = @link.list
-          if @cancelled
+          if check_id != @check_id
+            Log.debug { "一覧を確かめている間に終了したため入らない" }
+          elsif @cancelled
             Log.debug { "一覧を確かめている間にコントローラーがつながったため入らない" }
             @state = State::Idle
           elsif list && !list.connected.empty?
@@ -115,7 +124,7 @@ module PowerSave
           end
         rescue exception
           Log.error(exception: exception) { "省電力へ入る処理に失敗した" }
-          @state = State::Active
+          @state = State::Active if check_id == @check_id
         end
       end
     end

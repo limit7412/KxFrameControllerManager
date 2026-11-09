@@ -169,4 +169,17 @@ describe PowerSave::Usecase do
     settings.floats["steamvr/analogGain"].should eq 0.3
     store.saved.not_nil!.values.map(&.key).should eq ["performanceProfile"]
   end
+
+  it "一覧を確かめている間に shutdown したら、その結果では入らない" do
+    usecase, settings, _, _ = build
+    base = Time.instant
+    usecase.tick(false, base)
+    usecase.tick(false, base + 10.seconds)
+    usecase.state.should eq PowerSave::Usecase::State::Checking
+    usecase.shutdown
+    settle(usecase)
+
+    usecase.active?.should be_false
+    settings.writes.should be_empty
+  end
 end

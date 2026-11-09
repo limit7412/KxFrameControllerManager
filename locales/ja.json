@@ -33,6 +33,7 @@
   "update.downloading": "{tag} を取得しています",
   "update.applied": "{tag} へ置き換えました",
   "update.restarted": "ユニットを再起動しました",
+  "update.restart_failed": "置き換えは済みましたが、ユニットを再起動できませんでした。systemctl --user restart kx-frame-controller-manager を実行してください",
   "update.failed": "置き換えに失敗しました。元の実行ファイルはそのまま残っています",
   "error.config_reload": "設定の再読み込みに失敗した",
   "error.steamvr_open": "SteamVR への接続に失敗した",

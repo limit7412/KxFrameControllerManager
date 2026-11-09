@@ -34,9 +34,9 @@ module FrameLink
     end
 
     def list : PowerOff::ControllerList?
-      session do |protocol|
-        send(protocol, Codec.list_request)
-        message = receive_until(protocol, Time.instant + LIST_TIMEOUT) { |m| m.type == Codec::TYPE_CONTROLLER_LIST }
+      session do |connection|
+        send(connection, Codec.list_request)
+        message = receive_until(connection, Time.instant + LIST_TIMEOUT) { |m| m.type == Codec::TYPE_CONTROLLER_LIST }
         unless message
           Log.warn { "27062 から一覧の応答が来なかった" }
           next nil
@@ -46,24 +46,28 @@ module FrameLink
     end
 
     def disconnect(serial : String) : Bool
-      result = session do |protocol|
-        send(protocol, Codec.disconnect_request(serial))
+      result = session do |connection|
+        send(connection, Codec.disconnect_request(serial))
         # 応答は待たなくてよいが、読まずに閉じると送った要求が届く前に切れることがある。
-        receive_until(protocol, Time.instant + DISCONNECT_LINGER) { false }
+        receive_until(connection, Time.instant + DISCONNECT_LINGER) { false }
         true
       end
       result == true
     end
 
     # 接続を張って block を呼び、必ず閉じる。どこかで失敗したら nil を返す。
-    private def session(& : HTTP::WebSocket::Protocol -> T) : T? forall T
-      protocol = open
+    # 張った接続 1 本。受信のたびに読み出しの時限を期限の残りへ縮めるため、ソケットも持つ。
+    # 一覧の確認と切断は別のファイバで重なりうるので、インスタンス変数には置かない。
+    record Connection, protocol : HTTP::WebSocket::Protocol, socket : TCPSocket
+
+    private def session(& : Connection -> T) : T? forall T
+      connection = open
       begin
-        protocol.send(HELLO)
-        yield protocol
+        connection.protocol.send(HELLO)
+        yield connection
       ensure
         begin
-          protocol.close
+          connection.protocol.close
         rescue IO::Error
         end
       end
@@ -76,7 +80,7 @@ module FrameLink
       nil
     end
 
-    private def open : HTTP::WebSocket::Protocol
+    private def open : Connection
       socket = TCPSocket.new(HOST, @port, connect_timeout: CONNECT_TIMEOUT)
       begin
         socket.read_timeout = LIST_TIMEOUT
@@ -86,7 +90,7 @@ module FrameLink
         socket.close
         raise exception
       end
-      HTTP::WebSocket::Protocol.new(socket, masked: true)
+      Connection.new(HTTP::WebSocket::Protocol.new(socket, masked: true), socket)
     end
 
     # RFC 6455 のハンドシェイク。
@@ -113,17 +117,20 @@ module FrameLink
       end
     end
 
-    private def send(protocol : HTTP::WebSocket::Protocol, data : Bytes) : Nil
+    private def send(connection : Connection, data : Bytes) : Nil
       Log.debug { "27062 へ送る: #{Codec.hex(data)}" }
-      protocol.send(data)
+      connection.protocol.send(data)
     end
 
     # 期限まで受け取り続け、条件に合うメッセージが来たら返す。
     # 読み出しの時限に掛かったら、それ以上は待たずに nil を返す。
-    private def receive_until(protocol : HTTP::WebSocket::Protocol, deadline : Time::Instant, & : Codec::Message -> Bool) : Codec::Message?
+    private def receive_until(connection : Connection, deadline : Time::Instant, & : Codec::Message -> Bool) : Codec::Message?
+      protocol = connection.protocol
       buffer = Bytes.new(4096)
       message = IO::Memory.new
-      while Time.instant < deadline
+      while (remaining = deadline - Time.instant) > Time::Span.zero
+        # 期限は受信の前にしか見られない。無通信のまま待つと、開いたときの時限まで戻らない。
+        connection.socket.read_timeout = remaining
         info = begin
           protocol.receive(buffer)
         rescue IO::TimeoutError

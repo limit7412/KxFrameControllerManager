@@ -103,4 +103,16 @@ describe FrameLink::WebSocketRepository do
       server.close
     end
   end
+
+  it "切断要求の後にサーバーが黙っていても、読み残しの待ちは期限で打ち切る" do
+    server = FakeServer.new
+    server.silent = true
+    begin
+      started = Time.instant
+      FrameLink::WebSocketRepository.new(server.port).disconnect("91481bedcdfa").should be_true
+      (Time.instant - started).should be < 1.5.seconds
+    ensure
+      server.close
+    end
+  end
 end

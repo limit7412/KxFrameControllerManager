@@ -74,6 +74,14 @@ module PowerOff
       end
     end
 
+    # 押下中の判定を捨てる。SteamVR の終了とつなぎ直しのときに呼ぶ。
+    #
+    # つながっていない間は tick が呼ばれないため、押し始めた時刻が残る。
+    # 残したままつなぎ直すと、止まっていた時間まで長押しに数え、予告なしに切断してしまう。
+    def reset : Nil
+      @detectors.each_value(&.reset)
+    end
+
     # OpenVR のデバイスが切れたことを受け取る。切断の確認に使う。
     def device_deactivated(device_index : UInt32) : Nil
       @deactivated << device_index
