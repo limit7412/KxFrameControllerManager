@@ -71,6 +71,11 @@ module Config
     property priority : InputPriority = InputPriority::Normal
     # UpdateActionState を呼ぶ間隔。主ループの周期でもある。
     property poll_interval_ms : Int32 = 20
+    # 既定バインドで長押しに使うボタン。frame_controller の入力の名前（/input/ の後ろ）で書く。
+    # 使える名前は SteamVR::Bindings が決め、検証もそちらが登録する。
+    # SteamVR のバインド画面で利用者が別のバインドを選んでいれば、そちらが優先される。
+    property left_button : String = "view"
+    property right_button : String = "menu"
 
     def initialize
     end
@@ -110,6 +115,16 @@ module Config
     end
   end
 
+  # dashboard セクション。SteamVR のダッシュボードに出す設定画面のタブ。
+  class DashboardSection
+    include JSON::Serializable
+
+    property enabled : Bool = true
+
+    def initialize
+    end
+  end
+
   # update セクション。
   class UpdateSection
     include JSON::Serializable
@@ -140,6 +155,7 @@ module Config
     property feedback : FeedbackSection = FeedbackSection.new
     property steamvr : SteamVRSection = SteamVRSection.new
     property frame_link : FrameLinkSection = FrameLinkSection.new
+    property dashboard : DashboardSection = DashboardSection.new
     property update : UpdateSection = UpdateSection.new
     property log_level : String = "info"
     # CLI とログの表示言語。"auto" は環境変数 LANG などに従う。

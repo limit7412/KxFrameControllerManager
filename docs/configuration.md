@@ -32,7 +32,9 @@ CLI は設定ファイルを書き出さず、無いときや不正なときは�
   },
   "input": {
     "priority": "normal",
-    "poll_interval_ms": 20
+    "poll_interval_ms": 20,
+    "left_button": "view",
+    "right_button": "menu"
   },
   "feedback": {
     "haptics": true,
@@ -44,6 +46,9 @@ CLI は設定ファイルを書き出さず、無いときや不正なときは�
   },
   "frame_link": {
     "port": 27062
+  },
+  "dashboard": {
+    "enabled": true
   },
   "update": {
     "check_enabled": true,
@@ -107,12 +112,18 @@ CLI は設定ファイルを書き出さず、無いときや不正なときは�
 | --- | --- | --- | --- |
 | `priority` | `"normal"` | `normal` / `overlay_global` | SteamVR Input のアクションセットの優先度（仕様書 3.1 節） |
 | `poll_interval_ms` | `20` | 1 から 100 | 主ループの周期。入力の状態を読む間隔でもある |
+| `left_button` | `"view"` | `view` / `dpad_up` / `dpad_down` / `dpad_left` / `dpad_right` / `bumper` / `thumbstick` | 既定バインドで左手の長押しに使うボタン |
+| `right_button` | `"menu"` | `menu` / `a` / `b` / `x` / `y` / `bumper` / `thumbstick` | 既定バインドで右手の長押しに使うボタン |
 
 `overlay_global` は他のアプリがフォーカス中でも読めるが、SteamVR の「Experimental overlay input overrides」が要り、割り当てたボタンはゲーム側で効かなくなる。
 
-ボタンの割り当ては設定ファイルでは持たない。
-SteamVR のコントローラーバインド画面で KxFrameControllerManager を選び、「このコントローラーを切断（長押し）」を好きなボタンへ割り当てる。
-既定は左が View、右が Menu である。
+ボタンの割り当ては 2 通りある。
+
+- `left_button` と `right_button`（設定画面からも変えられる）：本ツールが書き出す既定バインドを書き換える。変えると、本ツールは SteamVR への接続を 1 回張り直して読ませる
+- SteamVR のコントローラーバインド画面：KxFrameControllerManager を選び、「このコントローラーを切断（長押し）」を好きなボタンへ割り当てる。ここで選んだバインドがあれば、SteamVR はそちらを使い、`left_button` と `right_button` は効かない
+
+選べるボタンは、その手にあって押し込みを持つものに限る。
+Steam ボタンはアプリから読めない見込みのため、トリガーとグリップはゲームで常に使うため外してある。
 
 ## feedback
 
@@ -141,6 +152,17 @@ SteamVR のコントローラーバインド画面で KxFrameControllerManager �
 | キー | 既定 | 範囲 | 意味 |
 | --- | --- | --- | --- |
 | `port` | `27062` | 1 から 65535 | ヘッドセット内の SteamVR ウェブサーバーのポート |
+
+## dashboard
+
+SteamVR のダッシュボードに出す設定画面のタブ。
+
+| キー | 既定 | 範囲 | 意味 |
+| --- | --- | --- | --- |
+| `enabled` | `true` | | タブを出すか |
+
+これは設定画面からは変えられない。画面から切ると、画面へ戻る道が無くなるためである。
+タブを作れなかったとき（libcairo が無い、SteamVR が断ったなど）はログに残し、次に SteamVR へつながるまでタブなしで常駐を続ける。
 
 ## update
 

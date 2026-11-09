@@ -22,6 +22,19 @@ module SteamVR
     end
   end
 
+  # オーバーレイに届くイベントのうち、設定画面が読み分けるもの。
+  enum OverlayEventKind
+    # ポインタのボタンを離した。押したことはこれで判定する。
+    MouseButtonUp
+    # タブが見えるようになった。
+    Shown
+    Other
+  end
+
+  # オーバーレイに届いたイベント 1 件。
+  # x と y はマウスの座標で、左下が原点である。マウス以外のイベントでは意味を持たない。
+  record OverlayEvent, kind : OverlayEventKind, x : Float32, y : Float32
+
   # OpenVR 呼び出しの境界（仕様書 3.6 節、4.1 節）。
   # 実装は openvr_repository.cr が libopenvr_api.so の動的ロードで提供する。
   abstract class Repository
@@ -89,6 +102,39 @@ module SteamVR
     abstract def set_float_setting(section : String, key : String, value : Float32) : Int32
     abstract def set_string_setting(section : String, key : String, value : String) : Int32
     abstract def remove_setting(section : String, key : String) : Int32
+
+    # IVROverlay（設定画面）。
+    #
+    # 設定画面を持たない境界の実装（spec の偽物など）でも書かずに済むよう、使えないことを返す既定を置く。
+    def overlay_available? : Bool
+      false
+    end
+
+    # ダッシュボードのタブを作り、本体とサムネイルのハンドルを返す。
+    def create_dashboard_overlay(key : String, name : String) : {UInt64, UInt64}?
+      nil
+    end
+
+    def destroy_overlay(handle : UInt64) : Nil
+    end
+
+    # 幅（メートル）、マウスでの操作、マウスの座標の大きさをまとめて決める。
+    def configure_overlay(handle : UInt64, width_m : Float32, mouse_width : Int32, mouse_height : Int32) : Bool
+      false
+    end
+
+    # RGBA の画素をそのまま渡す。
+    def set_overlay_raw(handle : UInt64, pixels : Bytes, width : Int32, height : Int32) : Bool
+      false
+    end
+
+    def overlay_visible?(handle : UInt64) : Bool
+      false
+    end
+
+    def poll_overlay_events(handle : UInt64) : Array(OverlayEvent)
+      [] of OverlayEvent
+    end
   end
 
   # vrmanifest ファイルの読み書きの境界。

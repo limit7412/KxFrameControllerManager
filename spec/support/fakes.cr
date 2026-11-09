@@ -4,6 +4,8 @@ require "../../src/steamvr/repository"
 require "../../src/steamvr/ffi"
 require "../../src/power_off/repository"
 require "../../src/power_save/repository"
+require "../../src/dashboard/canvas"
+require "../../src/dashboard/view"
 
 # 外部境界のテスト用実装。
 # usecase をファイルにも OpenVR にも触れずに確かめるために差し替える。
@@ -383,6 +385,102 @@ module Fakes
 
     def exists?(path : String) : Bool
       @files.has_key?(path)
+    end
+  end
+
+  # 設定画面のオーバーレイを持つ SteamVR の偽物。
+  class OverlayRepository < SteamVRRepository
+    property overlay_ok : Bool = true
+    property fail_create : Bool = false
+    property visible : Bool = true
+    property created : Int32 = 0
+    property destroyed : Array(UInt64) = [] of UInt64
+    property uploads : Array({UInt64, Int32, Int32}) = [] of {UInt64, Int32, Int32}
+    # 次の poll_overlay_events で返すイベント。返したら空にする。
+    property pending_overlay_events : Array(SteamVR::OverlayEvent) = [] of SteamVR::OverlayEvent
+
+    def initialize
+      @opened = true
+    end
+
+    def overlay_available? : Bool
+      @opened && @overlay_ok
+    end
+
+    def create_dashboard_overlay(key : String, name : String) : {UInt64, UInt64}?
+      return nil if @fail_create
+      @created += 1
+      {@created.to_u64 * 10, @created.to_u64 * 10 + 1}
+    end
+
+    def destroy_overlay(handle : UInt64) : Nil
+      @destroyed << handle
+    end
+
+    def configure_overlay(handle : UInt64, width_m : Float32, mouse_width : Int32, mouse_height : Int32) : Bool
+      true
+    end
+
+    def set_overlay_raw(handle : UInt64, pixels : Bytes, width : Int32, height : Int32) : Bool
+      @uploads << {handle, width, height}
+      true
+    end
+
+    def overlay_visible?(handle : UInt64) : Bool
+      @visible
+    end
+
+    def poll_overlay_events(handle : UInt64) : Array(SteamVR::OverlayEvent)
+      events = @pending_overlay_events
+      @pending_overlay_events = [] of SteamVR::OverlayEvent
+      events
+    end
+  end
+
+  # 中身は Dashboard 側に置く。抽象メソッドの既定値（Align::Left）を同じ名前で解決させるためである。
+  alias Canvas = Dashboard::FakeCanvas
+end
+
+module Dashboard
+  # 描いた文字を記録する Canvas。画素は持たない。
+  class FakeCanvas < Canvas
+    getter texts = [] of String
+
+    def width : Int32
+      View::WIDTH
+    end
+
+    def height : Int32
+      View::HEIGHT
+    end
+
+    def clear(color : Color) : Nil
+      @texts.clear
+    end
+
+    def fill_rect(x : Float64, y : Float64, w : Float64, h : Float64, color : Color, radius : Float64 = 0.0) : Nil
+    end
+
+    def stroke_rect(x : Float64, y : Float64, w : Float64, h : Float64, color : Color, radius : Float64 = 0.0, line : Float64 = 2.0) : Nil
+    end
+
+    def line(x1 : Float64, y1 : Float64, x2 : Float64, y2 : Float64, color : Color, width : Float64 = 2.0) : Nil
+    end
+
+    def arc(cx : Float64, cy : Float64, radius : Float64, from : Float64, to : Float64, color : Color, width : Float64 = 2.0) : Nil
+    end
+
+    def text(x : Float64, y : Float64, text : String, size : Float64, color : Color, bold : Bool = false, align : Align = Align::Left) : Nil
+      @texts << text
+    end
+
+    # 1 字を字の大きさの幅とみなす。
+    def text_width(text : String, size : Float64, bold : Bool = false) : Float64
+      text.size * size
+    end
+
+    def rgba : Bytes
+      Bytes.new(width * height * 4)
     end
   end
 end

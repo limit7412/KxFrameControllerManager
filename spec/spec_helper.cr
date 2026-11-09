@@ -15,6 +15,8 @@ require "../src/power_save/usecase"
 require "../src/frame_link/codec"
 require "../src/frame_link/websocket_repository"
 require "../src/runtime/cli"
+require "../src/steamvr/bindings"
+require "../src/dashboard/usecase"
 require "../src/runtime/systemd"
 require "./support/fakes"
 

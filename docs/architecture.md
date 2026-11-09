@@ -35,6 +35,13 @@ src/
     input_repository.cr              IVRInput による入力と振動
     device_repository.cr             コントローラーの左右、接続、シリアル
     settings_repository.cr           IVRSettings による設定値の読み書き
+    bindings.cr                      既定バインドへ長押しのボタンを差し込む
+  dashboard/                       設定画面（SteamVR のダッシュボードのタブ）
+    canvas.cr                        描画先の抽象、色、文字の揃え
+    cairo.cr                         libcairo を dlopen して描く実装
+    models.cr                        画面へ見せる状態、画面から変える項目と 1 段ぶんの変え方
+    view.cr                          画面の組み立てと、押せる場所の一覧
+    usecase.cr                       タブの作成と破棄、操作の受け取り、描き直し、手動の切断
   config/                          設定
   update/                          更新
     models.cr                        版、添付、リリース
@@ -71,6 +78,7 @@ scripts/                           build.sh / verify.sh / package.sh
 - `power_save` は `power_off` の `DisconnectRepository` を使う。入る直前に 27062 の一覧を確かめるためである。
 - `steamvr` は `power_off` の `InputRepository`、`HapticRepository`、`DeviceRepository` と、`power_save` の `SettingsRepository` を、`frame_link` は `DisconnectRepository` を継承して実装する。
 - `runtime` は usecase を呼ぶだけで、ロジックを持たない。`runtime/systemd` は `update` の `ServiceControl` を継承して実装する。自動更新が常駐のユニットを再起動するためである。
+- `dashboard` は `steamvr` の repository（オーバーレイの部分）、`config` の usecase、`power_off` の型だけを参照する。常駐の部品には `main.cr` が渡す Proc を通して触れる。
 - FFI の宣言はコンテキスト内の `ffi.cr` に隔離し、同じコンテキストの repository だけが参照する。
 
 この規則の目的は、テスト境界の確保と、追加のときに変更範囲を狭めることにある。
@@ -110,6 +118,39 @@ SIGTERM と SIGINT で終わり、SIGHUP で設定を読み直す。
 ハンドラは印を立てるだけで、処理は主ループが行う。
 終わる前と、SteamVR の終了を受けて OpenVR を閉じる前に、省電力で変えた値を戻す。
 
+## 設定画面
+
+設定画面は SteamVR のダッシュボードのタブ（`IVROverlay` のダッシュボードオーバーレイ）として出す。
+仕様書 5.3 節が持ち込まないとした KxNotifyUtils の設定ウィンドウ（libui-ng）の代わりである。
+
+画面は CPU で描いた画素を `SetOverlayRaw` で渡す。ブラウザエンジンも GUI ツールキットも持たない。
+Frame 向けの既存のツール（FrameMover、frameeyeosc、Babble-Frame-Runtime）も、Cairo などで描いた画像をダッシュボードのタブに出しており、ブラウザは抱えていない。
+デスクトップの窓は VR の中から見えず、ヘッドセットのブラウザで開く Web 画面は、VR の中で別のアプリへ切り替える手間がかかる。
+
+描画には libcairo を使う。実行時に `dlopen` するため、実行ファイルの動的な依存は glibc だけのまま変わらない（`scripts/verify.sh`）。
+文字は Cairo の toy API で "Noto Sans CJK JP" を指定する。SteamOS に入っている書体である。
+libcairo が無ければタブを出さず、常駐の他の機能は止めない。
+
+`SetOverlayRaw` は渡すたびに画面が一瞬消える。そのため描き直すのは、タブが見えている間に内容が変わったときだけにする。
+状態は見えている間だけ 1 秒ごとに組み立て直し、前と同じなら描かない。ポインタの移動では描き直さない。
+押せる場所は描くときに一覧にしておき、`MouseButtonUp` の座標と照らし合わせる。オーバーレイのマウスの座標は左下が原点なので、上下を反転してから比べる。
+
+OpenVR は `VRApplication_Background` のまま使う。Background のアプリでもダッシュボードオーバーレイは作れる（Babble-Frame-Runtime が同じ形）。
+`IVROverlay_028` が通らなければタブだけを出さない。
+OpenVR を閉じる前には必ずオーバーレイを消す。画面を受け取っている途中のオーバーレイを残して閉じると、SteamVR 側が落ちた例がある（FrameMover）。
+前の接続のオーバーレイが残っていて `KeyInUse` が返ったときは、見つけて消してから作り直す。
+
+手動の切断は 2 回押しで動かす。VR の中では誤って触れやすく、確認のダイアログも出せないためである。
+切断は確認まで数秒待つので、主ループを止めないよう別のファイバで行う。長押しの切断と重なったときは受け付けない。
+
+画面からの保存は `Config::Usecase#save` を通し、ファイルへ書いたうえで SIGHUP と同じ反映を行う。
+数値は検証（仕様書 6.1 節）の範囲の中でだけ動かし、範囲外の値を作らない。
+
+長押しのボタンを変えると、既定バインドを書き直してから本ツールの OpenVR の接続だけを閉じ、次の拍でつなぎ直す。
+つなぎ直しのときに新しい既定バインドを書き出し、`SetActionManifestPath` を呼び直す。
+つなぎ直すとタブも消えるので、つなぎ直しはタブが見えていない間まで待つ。
+SteamVR そのものは再起動しない（仕様書 2 章）。
+
 ## 設定の反映
 
 設定は不変のスナップショット（`Config::Root`）として持ち、反映はスナップショットの差し替えで行う。
@@ -122,9 +163,9 @@ SIGTERM と SIGINT で終わり、SIGHUP で設定を読み直す。
 SteamVR が動いていないときに SteamVR を起こさず、初期化のほうを失敗させる種別はこれだけである。
 SteamVR が動いていないことは `VRInitError_Init_NoServerForBackgroundApp` という初期化の失敗として表れるので、この番号だけは異常として扱わず、ログも `debug` に留める。
 
-インターフェースは `IVRSystem_026`、`IVRApplications_008`、`IVRInput_011`、`IVRSettings_003` に固定し、初期化のたびに `VR_IsInterfaceVersionValid` で確かめる。
+インターフェースは `IVRSystem_026`、`IVRApplications_008`、`IVRInput_011`、`IVRSettings_003`、`IVROverlay_028` に固定し、初期化のたびに `VR_IsInterfaceVersionValid` で確かめる。
 前の 2 つが通らなければ SteamVR 連携を無効にする。
-後の 2 つが通らなければ、それを使う機能（長押しの検出、省電力）だけを止め、接続は保つ。
+後の 3 つが通らなければ、それを使う機能（長押しの検出、省電力、設定画面）だけを止め、接続は保つ。
 
 アクションのハンドルは、SteamVR へつながるたびに取り直す。
 `Repository#generation` が開き直すたびに進み、入力の側はこの番号の変化を見る。
@@ -136,6 +177,8 @@ vrmanifest は接続のたびに書き出し直して登録する。
 ## 仕様書からの変更点
 
 仕様書（issue #1）から変えた点を挙げる。
+
+- **設定画面とボタンの割り当て**：仕様書は GUI の設定画面をスコープ外とし、ボタンの割り当ては SteamVR のバインド画面だけで行うとしていた。利用者の要望で、SteamVR のダッシュボードのタブとして設定画面を足した。ボタンは設定 `input.left_button` と `input.right_button` で既定バインドへ差し込む。SteamVR のバインド画面で選んだバインドがあれば、そちらが優先される点は変わらない。
 
 - **Crystal の版**：仕様書は 1.14.0 の aarch64 版を使うとしていたが、1.14.0 には aarch64 Linux 向けの公式の配布物が無い。`crystal-lang/install-crystal` は公式の配布物を取りに行くため、arm のランナーで 1.14.0 は入らない。aarch64 Linux 向けの配布物がある 1.19.1 に上げた。x86_64 の検査のジョブも同じ版に揃えてある。1.19 では Linux のイベントループが libevent を使わなくなっており、静的に取り込むライブラリが 1 つ減った。
 - **静的リンクの方法**：Crystal の `--static` は glibc ごと静的にしようとするので使わない。静的ライブラリへのリンクだけを集めたディレクトリをリンカの探索の先頭に置き、glibc 以外を静的に取り込む。詳しくは `scripts/build.sh` のコメントにある。`-static-libgcc` も付け、動的な依存を glibc だけにしてある。
