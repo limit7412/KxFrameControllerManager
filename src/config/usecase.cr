@@ -123,7 +123,6 @@ module Config
       validate_feedback(root.feedback, errors)
       validate_steamvr(root.steamvr, errors)
       validate_frame_link(root.frame_link, errors)
-      validate_ui(root, errors)
       validate_general(root, errors)
 
       @section_validators.each do |section, validator|
@@ -186,16 +185,6 @@ module Config
     private def validate_frame_link(section : FrameLinkSection, errors : Array(ValidationError)) : Nil
       unless PORT_RANGE.includes?(section.port)
         errors << range_error("frame_link", "port", PORT_RANGE)
-      end
-    end
-
-    private def validate_ui(root : Root, errors : Array(ValidationError)) : Nil
-      port = root.ui.port
-      unless PORT_RANGE.includes?(port)
-        errors << range_error("ui", "port", PORT_RANGE)
-      end
-      if port == root.frame_link.port
-        errors << ValidationError.new("ui", "port は frame_link.port と別の値で指定する")
       end
     end
 

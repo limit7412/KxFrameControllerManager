@@ -115,14 +115,11 @@ module Config
     end
   end
 
-  # ui セクション。ヘッドセット内で開く設定画面。
-  #
-  # 待ち受けるのは 127.0.0.1 だけである。ヘッドセットの外から開くときは ssh のポート転送を使う。
-  class UISection
+  # dashboard セクション。SteamVR のダッシュボードに出す設定画面のタブ。
+  class DashboardSection
     include JSON::Serializable
 
     property enabled : Bool = true
-    property port : Int32 = 27070
 
     def initialize
     end
@@ -153,7 +150,7 @@ module Config
     property feedback : FeedbackSection = FeedbackSection.new
     property steamvr : SteamVRSection = SteamVRSection.new
     property frame_link : FrameLinkSection = FrameLinkSection.new
-    property ui : UISection = UISection.new
+    property dashboard : DashboardSection = DashboardSection.new
     property update : UpdateSection = UpdateSection.new
     property log_level : String = "info"
     # CLI とログの表示言語。"auto" は環境変数 LANG などに従う。

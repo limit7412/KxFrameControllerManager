@@ -19,6 +19,8 @@ module SteamVR
     # 版が合わなければその機能だけを止め、イベントの受け取りと vrmanifest の登録は続ける。
     IVRINPUT_VERSION    = "IVRInput_011"
     IVRSETTINGS_VERSION = "IVRSettings_003"
+    # 設定画面（ダッシュボードのタブ）。使えなければ設定画面だけを出さない。
+    IVROVERLAY_VERSION = "IVROverlay_028"
 
     LIBRARY_NAME = "libopenvr_api.so"
 
@@ -42,6 +44,7 @@ module SteamVR
       @applications = Pointer(LibOpenVR::IVRApplicationsFnTable).null
       @input = Pointer(LibOpenVR::IVRInputFnTable).null
       @settings = Pointer(LibOpenVR::IVRSettingsFnTable).null
+      @overlay = Pointer(LibOpenVR::IVROverlayFnTable).null
       @opened = false
       @generation = 0
       @reported_init_error = nil.as(Int32?)
@@ -117,6 +120,7 @@ module SteamVR
 
       @input = optional_table(get_generic, version_valid, IVRINPUT_VERSION, "長押しの検出").as(LibOpenVR::IVRInputFnTable*)
       @settings = optional_table(get_generic, version_valid, IVRSETTINGS_VERSION, "省電力").as(LibOpenVR::IVRSettingsFnTable*)
+      @overlay = optional_table(get_generic, version_valid, IVROVERLAY_VERSION, "設定画面").as(LibOpenVR::IVROverlayFnTable*)
 
       @generation += 1
       @opened = true
@@ -295,6 +299,81 @@ module SteamVR
       error
     end
 
+    def overlay_available? : Bool
+      @opened && !@overlay.null?
+    end
+
+    # ダッシュボードのタブを作る。
+    #
+    # 前の接続で作ったものが SteamVR に残っていると、同じキーでは作れない（KeyInUse）。
+    # そのときは残っているものを消して 1 回だけ作り直す。Babble-Frame-Runtime と同じ扱いである。
+    def create_dashboard_overlay(key : String, name : String) : {UInt64, UInt64}?
+      return nil unless overlay_available?
+      create = Proc(UInt8*, UInt8*, UInt64*, UInt64*, Int32).new(@overlay.value.create_dashboard_overlay, Pointer(Void).null)
+      main = LibOpenVR::OVERLAY_HANDLE_INVALID
+      thumbnail = LibOpenVR::OVERLAY_HANDLE_INVALID
+      error = create.call(key.to_unsafe, name.to_unsafe, pointerof(main), pointerof(thumbnail))
+      if error == LibOpenVR::OVERLAY_ERROR_KEY_IN_USE
+        find = Proc(UInt8*, UInt64*, Int32).new(@overlay.value.find_overlay, Pointer(Void).null)
+        stale = LibOpenVR::OVERLAY_HANDLE_INVALID
+        destroy_overlay(stale) if find.call(key.to_unsafe, pointerof(stale)) == LibOpenVR::ERROR_NONE
+        error = create.call(key.to_unsafe, name.to_unsafe, pointerof(main), pointerof(thumbnail))
+      end
+      return {main, thumbnail} if check("CreateDashboardOverlay", error)
+      nil
+    end
+
+    def destroy_overlay(handle : UInt64) : Nil
+      return unless overlay_available?
+      hide = Proc(UInt64, Int32).new(@overlay.value.hide_overlay, Pointer(Void).null)
+      destroy = Proc(UInt64, Int32).new(@overlay.value.destroy_overlay, Pointer(Void).null)
+      hide.call(handle)
+      destroy.call(handle)
+    end
+
+    def configure_overlay(handle : UInt64, width_m : Float32, mouse_width : Int32, mouse_height : Int32) : Bool
+      return false unless overlay_available?
+      width = Proc(UInt64, Float32, Int32).new(@overlay.value.set_overlay_width_in_meters, Pointer(Void).null)
+      method = Proc(UInt64, Int32, Int32).new(@overlay.value.set_overlay_input_method, Pointer(Void).null)
+      scale = Proc(UInt64, LibOpenVR::HmdVector2*, Int32).new(@overlay.value.set_overlay_mouse_scale, Pointer(Void).null)
+      vector = LibOpenVR::HmdVector2.new(x: mouse_width.to_f32, y: mouse_height.to_f32)
+      check("SetOverlayWidthInMeters", width.call(handle, width_m)) &&
+        check("SetOverlayInputMethod", method.call(handle, LibOpenVR::OVERLAY_INPUT_METHOD_MOUSE)) &&
+        check("SetOverlayMouseScale", scale.call(handle, pointerof(vector)))
+    end
+
+    def set_overlay_raw(handle : UInt64, pixels : Bytes, width : Int32, height : Int32) : Bool
+      return false unless overlay_available?
+      return false unless pixels.size == width * height * 4
+      call = Proc(UInt64, Void*, UInt32, UInt32, UInt32, Int32).new(@overlay.value.set_overlay_raw, Pointer(Void).null)
+      check("SetOverlayRaw", call.call(handle, pixels.to_unsafe.as(Void*), width.to_u32, height.to_u32, 4_u32))
+    end
+
+    def overlay_visible?(handle : UInt64) : Bool
+      return false unless overlay_available?
+      Proc(UInt64, Bool).new(@overlay.value.is_overlay_visible, Pointer(Void).null).call(handle)
+    end
+
+    # オーバーレイのイベントを読み切る。マウスのイベントでは data の先頭が VREvent_Mouse_t（x、y、button）である。
+    def poll_overlay_events(handle : UInt64) : Array(OverlayEvent)
+      events = [] of OverlayEvent
+      return events unless overlay_available?
+
+      call = Proc(UInt64, LibOpenVR::PVREvent, UInt32, Bool).new(@overlay.value.poll_next_overlay_event, Pointer(Void).null)
+      event = uninitialized LibOpenVR::VREvent
+      while call.call(handle, pointerof(event), sizeof(LibOpenVR::VREvent).to_u32)
+        # data は event_type、tracked_device_index、event_age_seconds の 12 バイトの後ろにある。
+        mouse = (pointerof(event).as(UInt8*) + 12).as(Float32*)
+        kind = case event.event_type
+               when LibOpenVR::EVENT_MOUSE_BUTTON_UP then OverlayEventKind::MouseButtonUp
+               when LibOpenVR::EVENT_OVERLAY_SHOWN   then OverlayEventKind::Shown
+               else                                       OverlayEventKind::Other
+               end
+        events << OverlayEvent.new(kind, mouse[0], mouse[1])
+      end
+      events
+    end
+
     # イベントの番号を読み分ける。spec から確かめられるよう、クラスに公開しておく。
     def self.kind_of(type : UInt32) : EventKind
       case type
@@ -448,6 +527,7 @@ module SteamVR
       @applications = Pointer(LibOpenVR::IVRApplicationsFnTable).null
       @input = Pointer(LibOpenVR::IVRInputFnTable).null
       @settings = Pointer(LibOpenVR::IVRSettingsFnTable).null
+      @overlay = Pointer(LibOpenVR::IVROverlayFnTable).null
       @repeated_errors.clear
       @opened = false
       unload

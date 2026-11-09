@@ -23,7 +23,8 @@ require "./steamvr/usecase"
 require "./update/installer"
 require "./update/repository"
 require "./update/usecase"
-require "./web_ui/server"
+require "./dashboard/cairo"
+require "./dashboard/usecase"
 
 # composition root。
 #
@@ -136,6 +137,8 @@ module KxFrameControllerManager
   class Resident
     Log = ::Log.for("main")
 
+    @dashboard : Dashboard::Usecase
+
     def initialize
       @file_backend = Runtime::DailyFileBackend.new(Runtime::Paths.log_directory)
       @backends = [@file_backend, Runtime::StderrBackend.new] of ::Log::Backend
@@ -150,7 +153,7 @@ module KxFrameControllerManager
       # 最後に 27062 の疎通を確かめた結果と、最後に読んだ設定の誤り。設定画面へ見せる。
       @link_reachable = nil.as(Bool?)
       @config_errors = [] of String
-      @web_ui = WebUI::Server.new(web_ui_usecase)
+      @dashboard = build_dashboard
       wire
 
       # シグナルのハンドラは別のファイバで走る。主ループはこの印を見て動く。
@@ -169,12 +172,14 @@ module KxFrameControllerManager
 
       until @stop_requested
         reload_config if @reload_requested
-        rebind if @parts.take_rebind
+        # ボタンの割り当ての反映は、設定画面のタブが見えていない間に行う。
+        # つなぎ直すとタブが一度消えるため、操作している最中には行わない。
+        rebind if !@dashboard.visible? && @parts.take_rebind
         @scheduler.step
         sleep @scheduler.poll_interval
       end
 
-      @web_ui.stop
+      @errors.guard("error.dashboard") { @dashboard.close }
       # 省電力で変えた値は、OpenVR を閉じる前に戻す。
       @errors.guard("error.power_save") { @parts.power_save.shutdown }
       @parts.steamvr.disconnect
@@ -195,8 +200,10 @@ module KxFrameControllerManager
         probe_link
         @errors.guard("error.power_off") { parts.power_off.tick(now) }
         @errors.guard("error.power_save") { parts.power_save.tick(parts.any_controller_connected?, now) }
+        @errors.guard("error.dashboard") { @dashboard.tick(now) }
       end
       parts.steamvr.before_close = -> do
+        @errors.guard("error.dashboard") { @dashboard.close }
         parts.power_off.reset
         @errors.guard("error.power_save") { parts.power_save.shutdown }
       end
@@ -210,44 +217,43 @@ module KxFrameControllerManager
     private def rebind : Nil
       return unless @parts.steamvr.connected?
       Log.info { "既定バインドを書き換えたため、SteamVR へつなぎ直す" }
+      @errors.guard("error.dashboard") { @dashboard.close }
       @parts.power_off.reset
       @errors.guard("error.power_save") { @parts.power_save.shutdown }
       @parts.steamvr.disconnect
+      @dashboard.rebound
     end
 
-    # 設定画面が呼ぶ操作を組み立てる。
-    private def web_ui_usecase : WebUI::Usecase
+    # 設定画面（ダッシュボードのタブ）を組み立てる。
+    private def build_dashboard : Dashboard::Usecase
       parts = @parts
-      usecase = WebUI::Usecase.new(@config)
-      usecase.buttons = PowerOff::Hand.values.to_h { |hand| {hand.label, SteamVR::Bindings.buttons(hand)} }
-      usecase.status = -> { snapshot }
-      usecase.disconnect = ->(hands : Array(PowerOff::Hand)) { parts.power_off.manual(hands) }
-      usecase.controllers = -> { parts.link.list }
-      usecase
+      translate = ->(key : String, vars : Hash(String, String)) { Runtime::I18n.t(key, vars) }
+      dashboard = Dashboard::Usecase.new(parts.openvr, @config, Dashboard::View.new(translate, VERSION))
+      dashboard.buttons = PowerOff::Hand.values.to_h { |hand| {hand, SteamVR::Bindings.buttons(hand)} }
+      dashboard.status = -> { snapshot }
+      dashboard.disconnect = ->(hands : Array(PowerOff::Hand)) { parts.power_off.manual(hands) }
+      dashboard.canvas_factory = ->(width : Int32, height : Int32) { Dashboard::CairoCanvas.create(width, height).as(Dashboard::Canvas?) }
+      dashboard
     end
 
-    private def snapshot : WebUI::Snapshot
+    private def snapshot : Dashboard::Snapshot
       parts = @parts
       connected = parts.steamvr.connected?
-      hands = PowerOff::Hand.values.to_h do |hand|
-        status = WebUI::HandStatus.new(
+      hands = PowerOff::Hand.values.map do |hand|
+        Dashboard::HandStatus.new(
           connected && parts.devices.connected?(hand),
           connected ? parts.devices.serial(hand) : nil,
           SteamVR::Bindings.button(@config.current.input, hand),
         )
-        {hand.label, status}
       end
-      gain = connected ? parts.settings.gain_range : nil
-      WebUI::Snapshot.new(
-        version: VERSION,
-        locale: Runtime::I18n.locale,
+      Dashboard::Snapshot.new(
         steamvr_connected: connected,
-        hands: hands,
+        left: hands[0],
+        right: hands[1],
         link_reachable: @link_reachable,
         power_save_state: parts.power_save.state.to_s.underscore,
         power_save_pending: File.exists?(Runtime::Paths.power_save_state_path),
-        gain_range: gain.try { |range| [range[0], range[1]] },
-        busy: parts.power_off.busy?,
+        gain_range: connected ? parts.settings.gain_range : nil,
         config_errors: @config_errors,
       )
     end
@@ -312,7 +318,7 @@ module KxFrameControllerManager
       @parts.apply(root)
       @scheduler.retry_interval = root.steamvr.retry_interval_s.seconds
       @scheduler.poll_interval = root.input.poll_interval_ms.milliseconds
-      @web_ui.apply(root.ui)
+      @dashboard.apply(root.dashboard.enabled)
     end
 
     # SIGTERM と SIGINT で終わり、SIGHUP で設定を読み直す（仕様書 5.2 節、6.1 節）。
@@ -371,7 +377,7 @@ module KxFrameControllerManager
         end
 
         puts t("status.power_save_pending") if File.exists?(Runtime::Paths.power_save_state_path)
-        puts t("status.ui", {"url" => "http://127.0.0.1:#{@root.ui.port}/", "port" => @root.ui.port.to_s}) if @root.ui.enabled
+        puts t("status.dashboard") if @root.dashboard.enabled
         list ? 0 : 1
       end
     end

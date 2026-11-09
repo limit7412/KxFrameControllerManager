@@ -28,6 +28,23 @@ module SteamVR
     EVENT_TRACKED_DEVICE_DEACTIVATED = 101
     EVENT_QUIT                       = 700
 
+    # 設定画面（ダッシュボードのタブ）で使う値。
+    # EVREventType のうち、オーバーレイに届くもの。
+    EVENT_MOUSE_BUTTON_UP = 302
+    EVENT_OVERLAY_SHOWN   = 500
+    # VROverlayInputMethod_Mouse
+    OVERLAY_INPUT_METHOD_MOUSE = 1
+    # EVROverlayError_VROverlayError_KeyInUse。前の接続のオーバーレイが残っているときに返る。
+    OVERLAY_ERROR_KEY_IN_USE = 17
+    # k_ulOverlayHandleInvalid
+    OVERLAY_HANDLE_INVALID = 0_u64
+
+    # HmdVector2_t
+    struct HmdVector2
+      x : Float32
+      y : Float32
+    end
+
     # EVRInputError_VRInputError_None と EVRSettingsError_VRSettingsError_None
     INPUT_ERROR_NONE    = 0
     SETTINGS_ERROR_NONE = 0
@@ -236,6 +253,92 @@ module SteamVR
       get_string : Void*                        # GetString
       remove_section : Void*                    # RemoveSection
       remove_key_in_section : Void*             # RemoveKeyInSection
+    end
+
+    # VR_IVROverlay_FnTable（要素数 82）。設定画面をダッシュボードのタブとして出すのに使う。
+    struct IVROverlayFnTable
+      find_overlay : Void*                                   # FindOverlay
+      create_overlay : Void*                                 # CreateOverlay
+      create_subview_overlay : Void*                         # CreateSubviewOverlay
+      destroy_overlay : Void*                                # DestroyOverlay
+      get_overlay_key : Void*                                # GetOverlayKey
+      get_overlay_name : Void*                               # GetOverlayName
+      set_overlay_name : Void*                               # SetOverlayName
+      get_overlay_image_data : Void*                         # GetOverlayImageData
+      get_overlay_error_name_from_enum : Void*               # GetOverlayErrorNameFromEnum
+      set_overlay_rendering_pid : Void*                      # SetOverlayRenderingPid
+      get_overlay_rendering_pid : Void*                      # GetOverlayRenderingPid
+      set_overlay_flag : Void*                               # SetOverlayFlag
+      get_overlay_flag : Void*                               # GetOverlayFlag
+      get_overlay_flags : Void*                              # GetOverlayFlags
+      set_overlay_color : Void*                              # SetOverlayColor
+      get_overlay_color : Void*                              # GetOverlayColor
+      set_overlay_alpha : Void*                              # SetOverlayAlpha
+      get_overlay_alpha : Void*                              # GetOverlayAlpha
+      set_overlay_texel_aspect : Void*                       # SetOverlayTexelAspect
+      get_overlay_texel_aspect : Void*                       # GetOverlayTexelAspect
+      set_overlay_sort_order : Void*                         # SetOverlaySortOrder
+      get_overlay_sort_order : Void*                         # GetOverlaySortOrder
+      set_overlay_width_in_meters : Void*                    # SetOverlayWidthInMeters
+      get_overlay_width_in_meters : Void*                    # GetOverlayWidthInMeters
+      set_overlay_curvature : Void*                          # SetOverlayCurvature
+      get_overlay_curvature : Void*                          # GetOverlayCurvature
+      set_overlay_pre_curve_pitch : Void*                    # SetOverlayPreCurvePitch
+      get_overlay_pre_curve_pitch : Void*                    # GetOverlayPreCurvePitch
+      set_overlay_texture_color_space : Void*                # SetOverlayTextureColorSpace
+      get_overlay_texture_color_space : Void*                # GetOverlayTextureColorSpace
+      set_overlay_texture_bounds : Void*                     # SetOverlayTextureBounds
+      get_overlay_texture_bounds : Void*                     # GetOverlayTextureBounds
+      get_overlay_transform_type : Void*                     # GetOverlayTransformType
+      set_overlay_transform_absolute : Void*                 # SetOverlayTransformAbsolute
+      get_overlay_transform_absolute : Void*                 # GetOverlayTransformAbsolute
+      set_overlay_transform_tracked_device_relative : Void*  # SetOverlayTransformTrackedDeviceRelative
+      get_overlay_transform_tracked_device_relative : Void*  # GetOverlayTransformTrackedDeviceRelative
+      set_overlay_transform_tracked_device_component : Void* # SetOverlayTransformTrackedDeviceComponent
+      get_overlay_transform_tracked_device_component : Void* # GetOverlayTransformTrackedDeviceComponent
+      set_overlay_transform_cursor : Void*                   # SetOverlayTransformCursor
+      get_overlay_transform_cursor : Void*                   # GetOverlayTransformCursor
+      set_overlay_transform_projection : Void*               # SetOverlayTransformProjection
+      set_subview_position : Void*                           # SetSubviewPosition
+      show_overlay : Void*                                   # ShowOverlay
+      hide_overlay : Void*                                   # HideOverlay
+      is_overlay_visible : Void*                             # IsOverlayVisible
+      get_transform_for_overlay_coordinates : Void*          # GetTransformForOverlayCoordinates
+      wait_frame_sync : Void*                                # WaitFrameSync
+      poll_next_overlay_event : Void*                        # PollNextOverlayEvent
+      get_overlay_input_method : Void*                       # GetOverlayInputMethod
+      set_overlay_input_method : Void*                       # SetOverlayInputMethod
+      get_overlay_mouse_scale : Void*                        # GetOverlayMouseScale
+      set_overlay_mouse_scale : Void*                        # SetOverlayMouseScale
+      compute_overlay_intersection : Void*                   # ComputeOverlayIntersection
+      is_hover_target_overlay : Void*                        # IsHoverTargetOverlay
+      set_overlay_intersection_mask : Void*                  # SetOverlayIntersectionMask
+      trigger_laser_mouse_haptic_vibration : Void*           # TriggerLaserMouseHapticVibration
+      set_overlay_cursor : Void*                             # SetOverlayCursor
+      set_overlay_cursor_position_override : Void*           # SetOverlayCursorPositionOverride
+      clear_overlay_cursor_position_override : Void*         # ClearOverlayCursorPositionOverride
+      set_overlay_texture : Void*                            # SetOverlayTexture
+      clear_overlay_texture : Void*                          # ClearOverlayTexture
+      set_overlay_raw : Void*                                # SetOverlayRaw
+      set_overlay_from_file : Void*                          # SetOverlayFromFile
+      get_overlay_texture : Void*                            # GetOverlayTexture
+      release_native_overlay_handle : Void*                  # ReleaseNativeOverlayHandle
+      get_overlay_texture_size : Void*                       # GetOverlayTextureSize
+      create_dashboard_overlay : Void*                       # CreateDashboardOverlay
+      is_dashboard_visible : Void*                           # IsDashboardVisible
+      is_active_dashboard_overlay : Void*                    # IsActiveDashboardOverlay
+      set_dashboard_overlay_scene_process : Void*            # SetDashboardOverlaySceneProcess
+      get_dashboard_overlay_scene_process : Void*            # GetDashboardOverlaySceneProcess
+      show_dashboard : Void*                                 # ShowDashboard
+      get_primary_dashboard_device : Void*                   # GetPrimaryDashboardDevice
+      show_keyboard : Void*                                  # ShowKeyboard
+      show_keyboard_for_overlay : Void*                      # ShowKeyboardForOverlay
+      get_keyboard_text : Void*                              # GetKeyboardText
+      hide_keyboard : Void*                                  # HideKeyboard
+      set_keyboard_transform_absolute : Void*                # SetKeyboardTransformAbsolute
+      set_keyboard_position_for_overlay : Void*              # SetKeyboardPositionForOverlay
+      show_message_overlay : Void*                           # ShowMessageOverlay
+      close_message_overlay : Void*                          # CloseMessageOverlay
     end
 
     alias PVREvent = VREvent*
