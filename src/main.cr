@@ -13,6 +13,7 @@ require "./runtime/logging"
 require "./runtime/paths"
 require "./runtime/scheduler"
 require "./runtime/systemd"
+require "./steamvr/bindings"
 require "./steamvr/device_repository"
 require "./steamvr/input_repository"
 require "./steamvr/openvr_repository"
@@ -22,6 +23,7 @@ require "./steamvr/usecase"
 require "./update/installer"
 require "./update/repository"
 require "./update/usecase"
+require "./web_ui/server"
 
 # composition root。
 #
@@ -34,10 +36,20 @@ module KxFrameControllerManager
 
   # SteamVR Input のアクションマニフェストと既定バインド（仕様書 5.4 節）。
   # コンパイル時に埋め込み、SteamVR へつながるたびに書き出す。
+  # 既定バインドは雛形として使い、長押しのボタンを設定から差し込んでから書き出す。
   ACTION_FILES = {
     "actions.json"                   => {{ read_file("#{__DIR__}/../actions/actions.json") }},
     "bindings_frame_controller.json" => {{ read_file("#{__DIR__}/../actions/bindings_frame_controller.json") }},
   }
+
+  BINDINGS_FILE = "bindings_frame_controller.json"
+
+  # 設定の usecase を組み立てる。コンテキストにしか分からない検証をここで足す。
+  def self.config_usecase(repository : Config::Repository) : Config::Usecase
+    usecase = Config::Usecase.new(repository)
+    usecase.register_validator("input") { |root| SteamVR::Bindings.validate(root.input) }
+    usecase
+  end
 
   # 常駐と CLI の両方で使う部品の組み立て。
   class Parts
@@ -48,8 +60,11 @@ module KxFrameControllerManager
     getter link : FrameLink::WebSocketRepository
     getter power_off : PowerOff::Usecase
     getter power_save : PowerSave::Usecase
+    getter settings : SteamVR::SettingsRepository
 
     def initialize(root : Config::Root)
+      # 既定バインドを書き換えたら、SteamVR へつなぎ直して読ませる。apply が立て、常駐の主ループが見る。
+      @rebind_pending = false
       @openvr = SteamVR::OpenVRRepository.new
       @steamvr = SteamVR::Usecase.new(
         @openvr,
@@ -58,7 +73,7 @@ module KxFrameControllerManager
         Runtime::Paths.executable_path,
         Runtime::Paths.action_manifest_path,
       )
-      @steamvr.action_files = ACTION_FILES.to_h { |name, content| {File.join(Runtime::Paths.actions_directory, name), content} }
+      @steamvr.action_files = action_files(root.input)
 
       @actions = SteamVR::InputActions.new(@openvr, Runtime::Paths.action_manifest_path)
       @devices = SteamVR::DeviceRepository.new(@openvr)
@@ -71,8 +86,9 @@ module KxFrameControllerManager
         root.power_off,
         root.feedback,
       )
+      @settings = SteamVR::SettingsRepository.new(@openvr)
       @power_save = PowerSave::Usecase.new(
-        SteamVR::SettingsRepository.new(@openvr),
+        @settings,
         PowerSave::FileStateRepository.new(Runtime::Paths.power_save_state_path),
         @link,
         root.power_save,
@@ -87,6 +103,27 @@ module KxFrameControllerManager
       @link.port = root.frame_link.port
       @power_off.apply(root.power_off, root.feedback)
       @power_save.apply(root.power_save)
+
+      files = action_files(root.input)
+      unless files == @steamvr.action_files
+        @steamvr.action_files = files
+        @rebind_pending = true
+      end
+    end
+
+    # 既定バインドを書き換えてから、まだ SteamVR へ読ませていなければ真を返し、印を下ろす。
+    def take_rebind : Bool
+      pending = @rebind_pending
+      @rebind_pending = false
+      pending
+    end
+
+    # 書き出すアクションマニフェストと既定バインド。キーは書き出す先の絶対パスである。
+    private def action_files(input : Config::InputSection) : Hash(String, String)
+      ACTION_FILES.to_h do |name, content|
+        content = SteamVR::Bindings.render(content, input) if name == BINDINGS_FILE
+        {File.join(Runtime::Paths.actions_directory, name), content}
+      end
     end
 
     # どちらかのコントローラーが OpenVR でつながっているか。
@@ -107,9 +144,13 @@ module KxFrameControllerManager
       @errors = Error::Usecase.new
       @errors.log_text = ->(key : String) { Runtime::I18n.log_text(key) }
 
-      @config = Config::Usecase.new(Config::FileRepository.new(Runtime::Paths.config_path))
+      @config = KxFrameControllerManager.config_usecase(Config::FileRepository.new(Runtime::Paths.config_path))
       @parts = Parts.new(@config.current)
       @scheduler = Runtime::Scheduler.new(@parts.steamvr, @errors)
+      # 最後に 27062 の疎通を確かめた結果と、最後に読んだ設定の誤り。設定画面へ見せる。
+      @link_reachable = nil.as(Bool?)
+      @config_errors = [] of String
+      @web_ui = WebUI::Server.new(web_ui_usecase)
       wire
 
       # シグナルのハンドラは別のファイバで走る。主ループはこの印を見て動く。
@@ -128,10 +169,12 @@ module KxFrameControllerManager
 
       until @stop_requested
         reload_config if @reload_requested
+        rebind if @parts.take_rebind
         @scheduler.step
         sleep @scheduler.poll_interval
       end
 
+      @web_ui.stop
       # 省電力で変えた値は、OpenVR を閉じる前に戻す。
       @errors.guard("error.power_save") { @parts.power_save.shutdown }
       @parts.steamvr.disconnect
@@ -159,6 +202,56 @@ module KxFrameControllerManager
       end
     end
 
+    # 既定バインドを書き換えたあと、SteamVR へつなぎ直して読ませる。
+    #
+    # つなぎ直すのは本ツールの OpenVR の接続だけで、SteamVR そのものは再起動しない（仕様書 2 章）。
+    # 閉じる前の後始末は SteamVR の終了を受けたときと同じにする。次の拍で Scheduler がつなぎ直し、
+    # そのときに新しい既定バインドを書き出してアクションを読ませ直す。
+    private def rebind : Nil
+      return unless @parts.steamvr.connected?
+      Log.info { "既定バインドを書き換えたため、SteamVR へつなぎ直す" }
+      @parts.power_off.reset
+      @errors.guard("error.power_save") { @parts.power_save.shutdown }
+      @parts.steamvr.disconnect
+    end
+
+    # 設定画面が呼ぶ操作を組み立てる。
+    private def web_ui_usecase : WebUI::Usecase
+      parts = @parts
+      usecase = WebUI::Usecase.new(@config)
+      usecase.buttons = PowerOff::Hand.values.to_h { |hand| {hand.label, SteamVR::Bindings.buttons(hand)} }
+      usecase.status = -> { snapshot }
+      usecase.disconnect = ->(hands : Array(PowerOff::Hand)) { parts.power_off.manual(hands) }
+      usecase.controllers = -> { parts.link.list }
+      usecase
+    end
+
+    private def snapshot : WebUI::Snapshot
+      parts = @parts
+      connected = parts.steamvr.connected?
+      hands = PowerOff::Hand.values.to_h do |hand|
+        status = WebUI::HandStatus.new(
+          connected && parts.devices.connected?(hand),
+          connected ? parts.devices.serial(hand) : nil,
+          SteamVR::Bindings.button(@config.current.input, hand),
+        )
+        {hand.label, status}
+      end
+      gain = connected ? parts.settings.gain_range : nil
+      WebUI::Snapshot.new(
+        version: VERSION,
+        locale: Runtime::I18n.locale,
+        steamvr_connected: connected,
+        hands: hands,
+        link_reachable: @link_reachable,
+        power_save_state: parts.power_save.state.to_s.underscore,
+        power_save_pending: File.exists?(Runtime::Paths.power_save_state_path),
+        gain_range: gain.try { |range| [range[0], range[1]] },
+        busy: parts.power_off.busy?,
+        config_errors: @config_errors,
+      )
+    end
+
     # つながるたびに 27062 から一覧を取り、疎通を確かめる。
     # 失敗しても常駐は続け、切断の直前にもう一度試す（仕様書 4.2 節）。
     private def probe_link : Nil
@@ -170,7 +263,9 @@ module KxFrameControllerManager
 
       link = @parts.link
       spawn(name: "probe_link") do
-        if list = link.list
+        list = link.list
+        @link_reachable = !list.nil?
+        if list
           Log.info { "27062 に届いた。接続中: #{list.connected.map(&.serial).join(", ").presence || "なし"}" }
         else
           Log.warn { "27062 に届かなかった。切断の直前にもう一度試す" }
@@ -199,21 +294,25 @@ module KxFrameControllerManager
 
       # 読めなかったとき、usecase は既定値で動き、on_apply を呼ばない。既定値を自分で反映する。
       apply(@config.current)
+      @config_errors = errors.map(&.to_s)
       STDERR.puts Runtime::I18n.t("cli.config_invalid")
       errors.each { |error| STDERR.puts "  #{error}" }
     end
 
     private def reload_config : Nil
       @reload_requested = false
-      @errors.guard("error.config_reload") { @config.reload }
+      @errors.guard("error.config_reload") { @config_errors = @config.reload.map(&.to_s) }
     end
 
+    # 検証を通った設定を反映する。反映できた時点で、設定ファイルの誤りは解消している。
     private def apply(root : Config::Root) : Nil
+      @config_errors = [] of String
       Runtime::Logging.setup(@backends, root.log_level)
       Runtime::I18n.locale = Runtime::I18n.resolve(root.language)
       @parts.apply(root)
       @scheduler.retry_interval = root.steamvr.retry_interval_s.seconds
       @scheduler.poll_interval = root.input.poll_interval_ms.milliseconds
+      @web_ui.apply(root.ui)
     end
 
     # SIGTERM と SIGINT で終わり、SIGHUP で設定を読み直す（仕様書 5.2 節、6.1 節）。
@@ -272,6 +371,7 @@ module KxFrameControllerManager
         end
 
         puts t("status.power_save_pending") if File.exists?(Runtime::Paths.power_save_state_path)
+        puts t("status.ui", {"url" => "http://127.0.0.1:#{@root.ui.port}/", "port" => @root.ui.port.to_s}) if @root.ui.enabled
         list ? 0 : 1
       end
     end
@@ -415,7 +515,7 @@ module KxFrameControllerManager
       repository = Config::FileRepository.new(Runtime::Paths.config_path)
       return Config::Root.default unless repository.exists?
       root = repository.load
-      errors = Config::Usecase.new(repository).validate(root)
+      errors = KxFrameControllerManager.config_usecase(repository).validate(root)
       return root if errors.empty?
       STDERR.puts Runtime::I18n.t("cli.config_invalid")
       errors.each { |error| STDERR.puts "  #{error}" }

@@ -193,6 +193,13 @@ describe Config::Usecase do
       errors.should contain "input: poll_interval_ms は 1 から 100 の範囲で指定する"
     end
 
+    it "ui.port の範囲と、frame_link.port と重ならないことを見る" do
+      usecase, _ = usecase_with
+      messages(usecase, %({"ui": {"port": 70000}})).should contain "ui: port は 1 から 65535 の範囲で指定する"
+      messages(usecase, %({"ui": {"port": 27062}})).should contain "ui: port は frame_link.port と別の値で指定する"
+      messages(usecase, %({"ui": {"port": 27070}})).should be_empty
+    end
+
     it "log_level と language と update.channel は決まった値だけを受け付ける" do
       usecase, _ = usecase_with
       errors = messages(usecase, %({"log_level": "loud", "language": "fr", "update": {"channel": "beta"}}))

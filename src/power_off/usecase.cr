@@ -127,6 +127,25 @@ module PowerOff
       targets.map { |target| disconnect(target) }
     end
 
+    # 長押しを経ずに手を指定して切る。設定画面の切断ボタンから呼ぶ。
+    #
+    # 長押しによる切断と同じく、処理中なら新しく始めずに nil を返す。
+    # 対象が決まらなければ空の配列を返す。終わるまで呼び出したファイバを止める。
+    def manual(hands : Array(Hand)) : Array(Result)?
+      if @busy
+        Log.info { "前の切断を処理中のため #{hands.map(&.label).join(" と ")} の切断を受け付けない" }
+        return nil
+      end
+
+      @busy = true
+      begin
+        Log.info { "設定画面から #{hands.map(&.label).join(" と ")} の切断を受けた" }
+        execute(resolve(hands))
+      ensure
+        @busy = false
+      end
+    end
+
     private def fire(hand : Hand) : Nil
       if @busy
         Log.info { "#{hand.label}: 前の切断を処理中のため今回は切らない" }

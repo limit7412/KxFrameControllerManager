@@ -14,6 +14,7 @@
   "status.match_ok": "  {hand}: the OpenVR and 27062 serials match",
   "status.match_ng": "  {hand}: the OpenVR and 27062 serials do not match. This hand will not be disconnected",
   "status.power_save_pending": "Settings changed by power saving were not restored yet. The resident process restores them when it next connects to SteamVR",
+  "status.ui": "Settings screen: {url} (open it in the headset browser; from a PC, forward it with ssh -L {port}:127.0.0.1:{port})",
   "list.connected": "  connected: {serial} ({hand})",
   "list.paired": "  paired (not connected): {serial}",
   "list.no_connected": "  No controllers are connected",

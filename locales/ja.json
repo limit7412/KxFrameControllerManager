@@ -14,6 +14,7 @@
   "status.match_ok": "  {hand}: OpenVR と 27062 のシリアルが一致しました",
   "status.match_ng": "  {hand}: OpenVR と 27062 のシリアルを照合できません。この手は切断しません",
   "status.power_save_pending": "省電力で変えた設定値が戻されずに残っています。次に常駐が SteamVR へつながったときに戻します",
+  "status.ui": "設定画面: {url}（ヘッドセットのブラウザで開きます。PC からは ssh -L {port}:127.0.0.1:{port} で転送します）",
   "list.connected": "  接続中: {serial}（{hand}）",
   "list.paired": "  ペアリング済み（未接続）: {serial}",
   "list.no_connected": "  接続中のコントローラーはありません",

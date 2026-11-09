@@ -201,4 +201,32 @@ describe PowerOff::Usecase do
       usecase.execute([target]).first.outcome.should eq PowerOff::Outcome::SendFailed
     end
   end
+
+  describe "#manual" do
+    it "長押しを経ずに指定した手を切る" do
+      usecase, _, _, _, link = build
+      results = usecase.manual([PowerOff::Hand::Right]).not_nil!
+      results.map(&.outcome).should eq [PowerOff::Outcome::Disconnected]
+      link.sent.should eq ["bbbbbbbbbbbb"]
+      usecase.busy?.should be_false
+    end
+
+    it "長押しの切断を処理中なら受け付けない" do
+      usecase, input, _, _, link = build
+      link.ignore_disconnect = true
+      hold(usecase, input, PowerOff::Hand::Left)
+      sleep 1.millisecond
+      usecase.busy?.should be_true
+
+      usecase.manual([PowerOff::Hand::Right]).should be_nil
+      wait_idle(usecase)
+      link.sent.uniq.should eq ["aaaaaaaaaaaa"]
+    end
+
+    it "対象が決まらなければ空の配列を返す" do
+      usecase, _, _, _, link = build
+      link.list_result = nil
+      usecase.manual([PowerOff::Hand::Left]).should eq [] of PowerOff::Result
+    end
+  end
 end
