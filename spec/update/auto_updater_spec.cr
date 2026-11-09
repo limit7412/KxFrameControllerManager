@@ -63,6 +63,9 @@ private class FakeService < Update::ServiceControl
   property pid : Int64? = 100
   property restart_result = true
   getter restarts = 0
+  # 起動回数の制限に達した状態。解かれるまで restart は断られる。
+  property start_limited = false
+  getter resets = 0
   property on_restart : Proc(Int32, Nil) = ->(_count : Int32) { }
 
   def active? : Bool
@@ -71,8 +74,14 @@ private class FakeService < Update::ServiceControl
 
   def restart : Bool
     @restarts += 1
+    return false if @start_limited
     @on_restart.call(@restarts)
     @restart_result
+  end
+
+  def reset_failed : Nil
+    @resets += 1
+    @start_limited = false
   end
 
   def main_pid : Int64?
@@ -350,6 +359,21 @@ describe Update::AutoUpdater do
     end
 
     # 記録は巻き戻しの必須条件ではない。投げたまま抜けると、起動しない版が置かれたまま残る。
+    # 新しい版が落ち続けると、起動確認の 60 秒の間に StartLimitBurst に達する。
+    it "起動回数の制限を解いてから元の版を起動する" do
+      with_updater do |fixture|
+        service = fixture.service
+        service.on_restart = ->(count : Int32) do
+          service.start_limited = true if count == 1
+          nil
+        end
+        fixture.updater.run(settings).outcome.should eq Update::RunOutcome::RolledBack
+        service.resets.should eq 1
+        service.start_limited.should be_false
+        service.restarts.should eq 2
+      end
+    end
+
     it "戻した版を記録できなくても元へ戻す" do
       with_updater do |fixture|
         fixture.service.on_restart = ->(_count : Int32) do

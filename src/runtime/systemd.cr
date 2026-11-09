@@ -90,6 +90,10 @@ module Runtime
       def main_pid : Int64?
         @systemctl.main_pid
       end
+
+      def reset_failed : Nil
+        @systemctl.run(["reset-failed", UNIT_NAME])
+      end
     end
 
     # ユニットを書き出して有効にし、起動する。自動更新のタイマーも書き出して有効にする。

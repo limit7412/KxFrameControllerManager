@@ -16,6 +16,10 @@ module Update
     abstract def restart : Bool
     # ユニットの主プロセスの番号。動いていなければ nil を返す。
     abstract def main_pid : Int64?
+    # 失敗の状態と起動回数の制限を解く。
+    # 新しい版が起動直後に落ち続けると、systemd は StartLimitBurst に達したユニットの起動を断る。
+    # 解かないまま戻しても、元の版を起動できない。
+    abstract def reset_failed : Nil
   end
 
   # 取得した実行ファイルを、置き換える前に試しに起動して確かめる。
@@ -270,6 +274,7 @@ module Update
         return RunResult.new(RunOutcome::RollbackFailed, tag)
       end
 
+      @service.reset_failed
       unless @service.restart
         Log.error { "元の版へ戻したが、ユニットを起動し直せなかった" }
       end
