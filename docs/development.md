@@ -64,10 +64,11 @@ GitHub でタグ `X.Y.Z` のリリースを作って公開すると、`.github/w
 リリースとプレリリースには次の 2 つを添付する（仕様書 6.3 節）。
 
 - `kx-frame-controller-manager-linux-aarch64`：実行ファイル単体。`update` コマンドが名前で探す
-- `KxFrameControllerManager-<版>-linux-aarch64.tar.gz`：`KxFrameControllerManager/` の下に実行ファイル、`LICENSE.txt`、`THIRD-PARTY-NOTICES.md` を入れたもの。BOOTH へはこちらを上げる
+- `KxFrameControllerManager-<版>-linux-aarch64.tar.gz`：`KxFrameControllerManager/` の下に実行ファイル、`install.sh`、`LICENSE.txt`、`THIRD-PARTY-NOTICES.md` を入れたもの。BOOTH へはこちらを上げる
 
 tar.gz を作るのは `scripts/package.sh` で、手元でも `scripts/package.sh --version 1.2.3` で同じものを作れる。
-systemd のユーザーユニットと `install.sh` は、それを作る変更で中身に足す。
+導入用の `packaging/get.sh` は tar.gz の名前を同じ規則で組み立てて取りに行く。名前か中の構成（`KxFrameControllerManager/install.sh`）を変えるときは、`get.sh` も合わせて直す。
+`get.sh` は既定ブランチの raw URL から配っているため、既定ブランチへ入った時点で利用者に届く。
 
 ## テスト
 
