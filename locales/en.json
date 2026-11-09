@@ -33,6 +33,7 @@
   "update.downloading": "Downloading {tag}",
   "update.applied": "Replaced with {tag}",
   "update.restarted": "Restarted the unit",
+  "update.restart_failed": "Replaced the executable, but failed to restart the unit. Run systemctl --user restart kx-frame-controller-manager",
   "update.failed": "Failed to replace the executable. The current one is left as is",
   "error.config_reload": "Failed to reload the configuration",
   "error.steamvr_open": "Failed to connect to SteamVR",
