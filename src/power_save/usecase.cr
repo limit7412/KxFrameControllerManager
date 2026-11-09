@@ -132,10 +132,18 @@ module PowerSave
 
       @store.save(SavedState.new(plan.map(&.[0])))
 
-      plan.each do |saved, write|
+      plan.each_with_index do |(saved, write), index|
         next if write.call
         Log.error { "#{saved.section}/#{saved.key} を書き換えられなかったため、書き換えた分を戻す" }
-        restore
+        # 書き換えていない値まで書き戻すと、その書き戻しも同じ理由で失敗し、ファイルが残り続ける。
+        written = plan[0, index].map(&.[0])
+        failed = written.reject { |value| restore_one(value) }
+        if failed.empty?
+          @store.delete
+        else
+          @store.save(SavedState.new(failed))
+          Log.error { "#{failed.map(&.key).join(", ")} を戻せなかった。次に SteamVR へつながったときにやり直す" }
+        end
         return
       end
       Log.info { "両方のコントローラーが切れているため省電力へ入った（#{plan.map { |saved, _| saved.key }.join(", ")}）" }

@@ -6,7 +6,9 @@
 # 更新は実行ファイル単体を名前で探すため（src/update/models.cr の ASSET_NAME）、
 # tar.gz は別名で並べるだけにして、単体の添付は外さない。
 #
-# systemd のユーザーユニットと install.sh は、それを作る変更で中身に足す。
+# systemd のユーザーユニットは入れない。実行ファイルへ埋め込んであり、install.sh が呼ぶ
+# `kx-frame-controller-manager install` が実行ファイルの場所を埋めて書き出す。
+# 雛形をそのまま置くと、利用者が手で置いたときに実行ファイルのパスが合わない。
 #
 # 使い方:
 #   scripts/package.sh                                KxFrameControllerManager-dev-linux-aarch64.tar.gz を作る
@@ -50,6 +52,7 @@ folder="KxFrameControllerManager"
 # README.md は入れない。docs/ への相対リンクが展開した先では切れるためである。
 entries=(
   "kx-frame-controller-manager=$executable"
+  "install.sh=packaging/install.sh"
   "LICENSE.txt=LICENSE"
   "THIRD-PARTY-NOTICES.md=THIRD-PARTY-NOTICES.md"
 )
@@ -67,7 +70,7 @@ for entry in "${entries[@]}"; do
   fi
   cp "$source" "$staging/$folder/$name"
 done
-chmod 0755 "$staging/$folder/kx-frame-controller-manager"
+chmod 0755 "$staging/$folder/kx-frame-controller-manager" "$staging/$folder/install.sh"
 chmod 0644 "$staging/$folder/LICENSE.txt" "$staging/$folder/THIRD-PARTY-NOTICES.md"
 
 echo "==> $archive を作る"

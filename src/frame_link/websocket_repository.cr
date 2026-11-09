@@ -70,6 +70,7 @@ module FrameLink
       # 標準ライブラリは不正なフレームを素の Exception で知らせるため、種類を絞らずに受ける。
       # どの失敗でも、切断しない側へ倒すだけで常駐は続ける。
 
+
     rescue exception
       Log.warn { "27062 との通信に失敗した: #{exception.message}" }
       nil

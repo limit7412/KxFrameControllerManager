@@ -28,3 +28,10 @@ describe Runtime::Paths do
     end
   end
 end
+
+describe "Runtime::Paths.systemd_unit_path" do
+  it "XDG_CONFIG_HOME の下の systemd/user に置く" do
+    Runtime::Paths.systemd_unit_path({"HOME" => "/home/deck"})
+      .should eq "/home/deck/.config/systemd/user/kx-frame-controller-manager.service"
+  end
+end

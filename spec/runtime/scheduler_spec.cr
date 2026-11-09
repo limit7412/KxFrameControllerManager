@@ -75,3 +75,21 @@ describe Runtime::Scheduler do
     scheduler.step(start + 40.milliseconds)
   end
 end
+
+describe "Runtime::Scheduler#on_tick" do
+  it "つながっている間だけ毎拍呼ぶ" do
+    scheduler, repository, _ = build
+    ticks = 0
+    scheduler.on_tick = ->(_now : Time::Instant) { ticks += 1; nil }
+    start = Time.instant
+
+    scheduler.step(start)
+    ticks.should eq 0
+    scheduler.step(start + 20.milliseconds)
+    ticks.should eq 1
+
+    repository.push(SteamVR::EventKind::Quit)
+    scheduler.step(start + 40.milliseconds)
+    ticks.should eq 1
+  end
+end
