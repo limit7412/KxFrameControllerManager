@@ -194,7 +194,7 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "バージョン: $VERSION"
 
-      - uses: ./.github/actions/build-linux-aarch64
+      - uses: $/.github/actions/build-linux-aarch64
         with:
           version: ${{ steps.version.outputs.version }}
 

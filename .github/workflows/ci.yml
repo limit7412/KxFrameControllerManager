@@ -37,7 +37,7 @@ jobs:
       # ビルドの手順はリリースとプレリリースでも使うため複合アクションに置いてある。
       # CI とリリースで違う手順を踏むと、CI が通ったのにリリースで落ちる状態が起きる。
       # 版は渡さない。配布物ではないため、ソースの既定値のままでよい。
-      - uses: ./.github/actions/build-linux-aarch64
+      - uses: $/.github/actions/build-linux-aarch64
 
       - name: 単体テストを実行する
         # 配布先と同じ CPU でも回す。FFI の構造体の大きさなどは CPU で変わりうる。
