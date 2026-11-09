@@ -1,0 +1,68 @@
+name: KxFrameControllerManager をビルドする
+description: >
+  aarch64 Linux 向けの実行ファイルをビルドし、作業ディレクトリへ
+  kx-frame-controller-manager-linux-aarch64 を作って検査する。
+  CI とリリースとプレリリースで同じ手順を使うため、複合アクションに切り出してある。
+
+inputs:
+  version:
+    description: >
+      実行ファイルへ埋める版。
+      空にすると src/main.cr の既定値（0.1.0-dev）のままビルドする。
+    required: false
+    default: ""
+  crystal:
+    description: 使う Crystal の版。
+    required: false
+    default: "1.19.1"
+
+# ビルドの手順そのものは scripts/build.sh が、検査は scripts/verify.sh が持つ。
+# ここが持つのは、Crystal と静的ライブラリを用意すること、それらを呼ぶことだけである。
+# 手順を 2 か所に書くと、片方だけ直したときに配布物と手元ビルドが食い違い、
+# しかも手元では再現しないため気付けない（KxNotifyUtils の issue #20）。
+#
+# arm のランナー（ubuntu-24.04-arm）で動かす前提である。
+# Ubuntu 24.04 の glibc はヘッドセットと同じ 2.39 であり、ここでビルドしたものはそのまま動く。
+# ランナーを新しい版へ上げるときは、glibc がヘッドセットを超えないかを確かめる。
+# 超えれば verify.sh が落とす。
+runs:
+  using: composite
+  steps:
+    - name: アーキテクチャを確かめる
+      shell: bash
+      run: |
+        if [ "$(uname -m)" != "aarch64" ]; then
+          echo "::error::aarch64 のランナーで動かす必要がある（今は $(uname -m)）"
+          exit 1
+        fi
+
+    - uses: crystal-lang/install-crystal@v1.9.5
+      with:
+        crystal: ${{ inputs.crystal }}
+
+    - name: 静的ライブラリを入れる
+      # install-crystal も開発用パッケージを入れるが、どれを入れるかはあちらの都合で変わる。
+      # 静的リンクに要るものはここで明示する。
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends zlib1g-dev libssl-dev libpcre2-dev
+
+    - name: 本体をビルドする
+      # 版は環境変数で渡す。run へ直接展開すると、値に含まれる引用符や改行が
+      # シェルの構文として解釈され、任意の文を実行させられる。
+      # release.yml の workflow_dispatch は版を自由入力で受け取り、タグ名もそのまま流れてくる。
+      shell: bash
+      env:
+        KXFCM_VERSION: ${{ inputs.version }}
+      run: ./scripts/build.sh --output kx-frame-controller-manager-linux-aarch64
+
+    - name: 実行ファイルを検査する
+      # 動的な依存が glibc だけか、要求する glibc がヘッドセットを超えないか、
+      # 起動して埋めた版を表示できるかを見る。どれもビルドは通ってしまう類の誤りである。
+      shell: bash
+      env:
+        INPUT_VERSION: ${{ inputs.version }}
+      run: |
+        expected="${INPUT_VERSION:-0.1.0-dev}"
+        ./scripts/verify.sh kx-frame-controller-manager-linux-aarch64 --arch aarch64 --glibc 2.39 --version "$expected"

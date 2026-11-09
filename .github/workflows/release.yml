@@ -1,0 +1,90 @@
+name: Release Build
+
+# リリースの公開を契機に実行ファイルをビルドし、配布用の tar.gz と合わせてそのリリースへ添付する。
+#
+# `published` のみを対象にする。通常リリースとプレリリースのどちらの公開でも発火する。
+# ただし prerelease.yml が GITHUB_TOKEN で自動作成するプレリリースは、
+# ワークフローの連鎖起動を防ぐ GitHub Actions の仕様により `release` イベント自体が
+# 発火しないため対象外である。そちらの実行ファイルと tar.gz の添付は prerelease.yml 側で行う。
+#
+# `released` は追加しない。プレリリースからの昇格に限らず通常リリースの公開時にも
+# `published` と同時に発火するため、同じタグに対してこのワークフローが 2 回並行実行され、
+# 同名ファイルのアップロードが競合する。
+# プレリリースを正式リリースへ昇格した場合（`released` のみが発火するケース）は、
+# 昇格前の `published` で実行ファイルと tar.gz が添付済みである。
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 実行ファイルへ埋めるバージョン（例 0.1.0）。空ならソースの既定値のままビルドする。
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ビルド (Linux aarch64)
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      # リリースへの添付に必要
+      contents: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - name: バージョンを決める
+        id: version
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          TAG_NAME: ${{ github.event.release.tag_name }}
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+        run: |
+          set -euo pipefail
+
+          if [ "$EVENT_NAME" = "release" ]; then
+            VERSION="$TAG_NAME"
+          else
+            # 手動実行でバージョンを渡さなかった場合は空のままにする。
+            # ソースの既定値でビルドされ、リリース版と見分けが付く。
+            VERSION="${INPUT_VERSION:-}"
+          fi
+
+          # タグに v を付ける運用へ変わっても読めるよう、先頭の v は落とす
+          VERSION="${VERSION#v}"
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "バージョン: ${VERSION:-(ソースの既定値)}"
+
+      - uses: ./.github/actions/build-linux-aarch64
+        with:
+          version: ${{ steps.version.outputs.version }}
+
+      - name: 配布用の tar.gz を作る
+        id: package
+        # BOOTH へ頒布するときに使う。中身と名前は scripts/package.sh が決める。
+        env:
+          INPUT_VERSION: ${{ steps.version.outputs.version }}
+        run: ./scripts/package.sh --version "$INPUT_VERSION"
+
+      - name: 成果物を保存する
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: KxFrameControllerManager-${{ steps.version.outputs.version || 'dev' }}
+          path: |
+            kx-frame-controller-manager-linux-aarch64
+            ${{ steps.package.outputs.path }}
+
+      - name: リリースへ添付する
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v3.0.3
+        with:
+          # 実行ファイル単体の添付は外さない。`update` コマンドが名前で探している。
+          files: |
+            kx-frame-controller-manager-linux-aarch64
+            ${{ steps.package.outputs.path }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
