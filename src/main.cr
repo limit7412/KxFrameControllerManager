@@ -247,6 +247,9 @@ module KxFrameControllerManager
   # SteamVR へは常駐と別のアプリとしてつなぐ。Background で開くため、SteamVR が動いていなければ起こさない。
   class Tool
     @root : Config::Root
+    # 設定ファイルを読めて検証も通ったか。読めずに既定値へ倒したときは偽になる。
+    # 設定ファイルが無いときは真とする。無いなら既定値が利用者の設定である。
+    @config_loaded = true
 
     def initialize
       @root = read_config
@@ -379,6 +382,12 @@ module KxFrameControllerManager
     # 前に戻した版は入れない。ログは journald で読めるよう、設定のログレベルで標準エラーへ出す。
     def update(auto : Bool = false) : Int32
       if auto
+        # 読めなかった設定の代わりの既定値では auto_update が真になる。
+        # 利用者が切っていても置き換えてしまうため、設定を読めないうちは自動では何もしない。
+        unless @config_loaded
+          STDERR.puts t("update.config_unreadable")
+          return 1
+        end
         Runtime::Logging.setup([Runtime::StderrBackend.new] of ::Log::Backend, @root.log_level)
       end
 
@@ -434,10 +443,12 @@ module KxFrameControllerManager
       return root if errors.empty?
       STDERR.puts Runtime::I18n.t("cli.config_invalid")
       errors.each { |error| STDERR.puts "  #{error}" }
+      @config_loaded = false
       Config::Root.default
     rescue exception : JSON::Error | File::Error
       STDERR.puts Runtime::I18n.t("cli.config_invalid")
       STDERR.puts "  #{exception.message}"
+      @config_loaded = false
       Config::Root.default
     end
   end

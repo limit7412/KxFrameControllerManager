@@ -32,6 +32,7 @@
   "update.disabled": "設定で自動更新を切っているため確かめません",
   "update.not_due": "前回の確認から update.check_interval_h が経っていないため確かめません",
   "update.busy": "別の更新が走っているため何もしません",
+  "update.config_unreadable": "設定ファイルを読めないため、自動更新は行いません。設定を直すと次の確認から再開します",
   "update.rejected": "{tag} は前に置き換えて起動しなかった版のため入れません。入れるには update を手で実行してください",
   "update.applied": "{tag} へ置き換えました。ユニットが動いていないため再起動はしていません",
   "update.restarted": "{tag} へ置き換えてユニットを再起動し、起動したことを確かめました",

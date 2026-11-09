@@ -32,6 +32,7 @@
   "update.disabled": "Automatic updates are turned off in the configuration",
   "update.not_due": "update.check_interval_h has not passed since the last check",
   "update.busy": "Another update is running",
+  "update.config_unreadable": "Skipping the automatic update because the configuration could not be read. It resumes at the next check once the configuration is fixed",
   "update.rejected": "{tag} failed to start after a previous update, so it is skipped. Run update by hand to install it anyway",
   "update.applied": "Replaced with {tag}. The unit is not running, so it was not restarted",
   "update.restarted": "Replaced with {tag}, restarted the unit, and confirmed it started",
