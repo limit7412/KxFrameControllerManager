@@ -23,6 +23,11 @@ jobs:
       - name: 単体テストを実行する
         run: crystal spec
 
+      # 導入用の get.sh は利用者の端末で curl から直接流れるため、書き損じを先に見つける。
+      # shellcheck は GitHub のランナーに入っている。
+      - name: シェルスクリプトを検査する
+        run: shellcheck packaging/*.sh scripts/*.sh
+
       # 実際に配布するのは aarch64 版である。
       # CPU で分岐するコード（libopenvr_api.so の置き場所など）は、ここで aarch64 として型検査する。
       - name: aarch64 向けの型検査を行う

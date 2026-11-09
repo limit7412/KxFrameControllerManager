@@ -47,7 +47,7 @@ src/
   error/
     usecase.cr                       例外のログ記録
 actions/                           SteamVR Input のアクションマニフェストと frame_controller の既定バインド
-packaging/                         systemd ユーザーユニットの雛形と install.sh
+packaging/                         systemd ユーザーユニットの雛形、install.sh、導入用の get.sh
 locales/                           ja.json / en.json
 spec/                              単体テスト。support/fakes.cr が外部境界を差し替える
 scripts/                           build.sh / verify.sh / package.sh

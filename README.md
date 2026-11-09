@@ -12,7 +12,7 @@ KxFrameControllerManager は、Steam Frame のヘッドセット上で常駐し�
 
 - SteamVR Input のアクションとして長押しを読み、ヘッドセット内の SteamVR ウェブサーバー（`127.0.0.1:27062`）へ切断要求を送る。既定の割り当ては、左が View、右が Menu の長押しである
 - `status`、`list`、`disconnect` で疎通と照合を確かめ、長押しを経ずに切断できる
-- systemd のユーザーユニットで常駐する
+- systemd のユーザーユニットで常駐する。導入は `curl ... | bash` の 1 行で済む
 - 両方が切れている間の省電力は入っているが、実機での確認（仕様書 7.2 節）が済むまで既定で無効にしてある
 
 実機で確かめたのは、27062 への切断要求でコントローラーが切れることまでである（2026-11-09）。
@@ -22,6 +22,22 @@ Background アプリから SteamVR Input が読めるか、振動が出るかは
 
 - Steam Frame（SteamOS、aarch64）。Developer Mode を有効にし、ssh で入れること
 - SteamVR（動いていない間は何もせずに待つ）
+
+## 導入
+
+ヘッドセットの端末で次の 1 行を実行する。
+端末は、デスクトップモードの Konsole か、PC からの ssh で開ける。
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/limit7412/KxFrameControllerManager/master/packaging/get.sh | bash
+```
+
+最新の正式リリースの tar.gz を取って中の `install.sh` を実行し、systemd のユーザーユニットへ登録して起動する。
+sudo は要らない。
+同じ 1 行をもう一度実行すると、新しい版へ置き換えて起動し直す。
+
+プレリリースを入れるときは `bash -s -- --prerelease`、版を指定するときは `bash -s -- --version 0.1.0` を `bash` の代わりに書く。
+手順の詳細と、tar.gz を手で入れる方法は[セットアップガイド](docs/setup.md)にある。
 
 ## 置き場所
 

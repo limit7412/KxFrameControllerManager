@@ -3,23 +3,55 @@
 ヘッドセット（Steam Frame）へ入れて、長押しでコントローラーを切断できるようにするまでの手順である。
 sudo は使わず、ホームの外へは何も書かない。
 
-## 1. ヘッドセットへ入る
+## 1. ヘッドセットの端末を開く
 
-Steam Frame の設定で Developer Mode を有効にし、PC から ssh で入る。
+以降のコマンドは、どれもヘッドセットの上で実行する。
+端末は次のどちらかで開ける。
+
+- ヘッドセットでデスクトップモードへ切り替え、Konsole を起動する
+- Steam Frame の設定で Developer Mode を有効にし、PC から ssh で入る
+
+[sdev](https://github.com/neguse/sdev) の `sdev shell <IP> '<コマンド>'` でも同じコマンドを流せる。
+ただし、この経路で `systemctl --user` が使えるかはまだ確かめていない。
+導入の最後で systemd への登録が失敗したときは、上のどちらかで入り直して実行する。
 
 ## 2. 入れる
 
-[Releases](https://github.com/limit7412/KxFrameControllerManager/releases) から `KxFrameControllerManager-<版>-linux-aarch64.tar.gz` を取り、ヘッドセットへ送って展開する。
+次の 1 行で入れる。
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/limit7412/KxFrameControllerManager/master/packaging/get.sh | bash
+```
+
+このスクリプト（`packaging/get.sh`）は、次の順に進む。
+
+1. この端末が aarch64 の Linux で、root でないことを確かめる
+2. [Releases](https://github.com/limit7412/KxFrameControllerManager/releases) から最新の正式リリースを選び、`KxFrameControllerManager-<版>-linux-aarch64.tar.gz` を `~/.cache/KxFrameControllerManager/` の下へ取ってくる
+3. 展開して中の `install.sh` を実行し、終わったら作業用のディレクトリを消す
+
+`install.sh` は実行ファイルを `~/.local/bin/kx-frame-controller-manager` へ置き、`kx-frame-controller-manager install` を呼ぶ。
+`install` は systemd のユーザーユニットを `~/.config/systemd/user/` へ書き出し、有効にして起動する。
+ログインしている間は常駐し、SteamVR が動いていなければ何もせずに待つ。
+
+最新の正式リリースが選ばれるのは、GitHub の `/releases/latest` が正式リリースだけを指すためである。
+プレリリースを入れるときと、版を指定するときは、オプションを `bash -s --` の後ろに書く。
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/limit7412/KxFrameControllerManager/master/packaging/get.sh | bash -s -- --prerelease
+curl -fsSL https://raw.githubusercontent.com/limit7412/KxFrameControllerManager/master/packaging/get.sh | bash -s -- --version 0.1.0
+```
+
+プレリリースを入れたあと `update` でもプレリリースを追うには、設定の `update.channel` を `test` にする（[設定リファレンス](configuration.md)）。
+
+### tar.gz を手で入れる
+
+スクリプトを流したくないときは、tar.gz を Releases から取り、ヘッドセットへ送って展開する。
 
 ```sh
 tar -xzf KxFrameControllerManager-<版>-linux-aarch64.tar.gz
 cd KxFrameControllerManager
 ./install.sh
 ```
-
-`install.sh` は実行ファイルを `~/.local/bin/kx-frame-controller-manager` へ置き、`kx-frame-controller-manager install` を呼ぶ。
-`install` は systemd のユーザーユニットを `~/.config/systemd/user/` へ書き出し、有効にして起動する。
-ログインしている間は常駐し、SteamVR が動いていなければ何もせずに待つ。
 
 ## 3. 疎通を確かめる
 
@@ -67,6 +99,8 @@ journalctl --user -u kx-frame-controller-manager      # ログ
 ~/.local/bin/kx-frame-controller-manager update     # 新しい版があれば置き換えて起動し直す
 ~/.local/bin/kx-frame-controller-manager uninstall  # ユニットを止めて消す
 ```
+
+導入の 1 行をもう一度実行しても、最新の版へ置き換えて起動し直す。
 
 `uninstall` は実行ファイルと設定を消さない。
 すべて消すときは、続けて次を消す。
