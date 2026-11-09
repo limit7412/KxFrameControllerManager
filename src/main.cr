@@ -46,13 +46,6 @@ module KxFrameControllerManager
 
   BINDINGS_FILE = "bindings_frame_controller.json"
 
-  # 設定の usecase を組み立てる。コンテキストにしか分からない検証をここで足す。
-  def self.config_usecase(repository : Config::Repository) : Config::Usecase
-    usecase = Config::Usecase.new(repository)
-    usecase.register_validator("input") { |root| SteamVR::Bindings.validate(root.input) }
-    usecase
-  end
-
   # 常駐と CLI の両方で使う部品の組み立て。
   class Parts
     getter openvr : SteamVR::OpenVRRepository
@@ -563,6 +556,7 @@ module KxFrameControllerManager
   # 常駐と CLI で同じ検証を通すため、組み立てはここだけで行う。
   def self.config_usecase(repository : Config::Repository) : Config::Usecase
     usecase = Config::Usecase.new(repository)
+    usecase.register_validator("input") { |root| SteamVR::Bindings.validate(root.input) }
     usecase.register_validator("update") { |root| Update.validate(root.update) }
     usecase
   end
