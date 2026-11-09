@@ -234,6 +234,40 @@ describe Update::Installer do
     end
   end
 
+  describe "#rollback" do
+    it "置き換える前の実行ファイルを残し、そこへ戻す" do
+      with_installer do |fixture|
+        fixture.installer.download(release("1.0.0", fixture.repository.body))
+        staged = fixture.installer.staged("test").not_nil!
+        fixture.installer.apply(staged)
+
+        File.read(fixture.installer.backup_path).should eq "実行中の実行ファイル"
+
+        fixture.installer.rollback.should be_true
+        File.read(fixture.executable).should eq "実行中の実行ファイル"
+        File.exists?(fixture.installer.backup_path).should be_false
+      end
+    end
+
+    # 前回の置き換えで残したものがあっても、今回の置き換えの前の実行ファイルで残し直す。
+    it "前回の残りは今の実行ファイルで上書きする" do
+      with_installer do |fixture|
+        File.write(fixture.installer.backup_path, "前回の残り")
+        fixture.installer.download(release("1.0.0", fixture.repository.body))
+        fixture.installer.apply(fixture.installer.staged("test").not_nil!)
+
+        File.read(fixture.installer.backup_path).should eq "実行中の実行ファイル"
+      end
+    end
+
+    it "戻す先が無ければ偽を返し、今の実行ファイルに触れない" do
+      with_installer do |fixture|
+        fixture.installer.rollback.should be_false
+        File.read(fixture.executable).should eq "実行中の実行ファイル"
+      end
+    end
+  end
+
   describe "#discard" do
     # まとめて 1 つの rescue で括ると、先の 1 つが消せなかったときに
     # もう片方を試さないまま抜ける。両方が残ると staged の照合をまた通ってしまう。

@@ -1,0 +1,14 @@
+# KxFrameControllerManager の自動更新（docs/configuration.md の update セクション）。
+# kx-frame-controller-manager-update.timer が起動する。`install` が @EXECUTABLE@ を埋めて書き出す。
+#
+# 常駐のユニットとは分けてある。常駐を再起動した後も残り、新しい版が起動したかを確かめて、
+# 起動しなければ元へ戻すためである。
+
+[Unit]
+Description=KxFrameControllerManager automatic update
+
+[Service]
+Type=oneshot
+ExecStart="@EXECUTABLE@" update --auto
+# 取得と、再起動後の確かめ（最大 80 秒）を合わせても数分で終わる。止まったままにはしない。
+TimeoutStartSec=15min

@@ -1,5 +1,5 @@
 {
-  "cli.usage": "Usage: kx-frame-controller-manager <command>\n\nCommands:\n  run                    Run as a resident process (started by the systemd unit)\n  status                 Show SteamVR and 27062 reachability, and the serial match for each hand\n  list                   List the controllers reported by 27062\n  disconnect <target>    Disconnect without a long press. Target is left, right, both, or a serial\n  install                Write and enable the systemd user unit\n  uninstall              Stop and remove the systemd user unit\n  update                 Replace the executable with a newer release and restart the unit\n  version                Print the version",
+  "cli.usage": "Usage: kx-frame-controller-manager <command>\n\nCommands:\n  run                    Run as a resident process (started by the systemd unit)\n  status                 Show SteamVR and 27062 reachability, and the serial match for each hand\n  list                   List the controllers reported by 27062\n  disconnect <target>    Disconnect without a long press. Target is left, right, both, or a serial\n  install                Write and enable the systemd user unit and the update timer\n  uninstall              Stop and remove the systemd user unit\n  update [--auto]        Replace the executable with a newer release, restart the unit, and roll back if it does not start. The update timer passes --auto\n  version                Print the version",
   "cli.unknown_command": "Unknown command: {command}",
   "cli.unexpected_argument": "This command takes no arguments: {argument}",
   "cli.disconnect_needs_target": "Give disconnect one target: left, right, both, or a serial",
@@ -29,11 +29,14 @@
   "update.unreachable": "Could not check for updates. Check the network",
   "update.incomplete": "Could not fetch the whole release list, so the latest version is unknown",
   "update.unknown": "This is a local build ({version}); updates are not checked",
-  "update.available": "A new version is available",
-  "update.downloading": "Downloading {tag}",
-  "update.applied": "Replaced with {tag}",
-  "update.restarted": "Restarted the unit",
-  "update.restart_failed": "Replaced the executable, but failed to restart the unit. Run systemctl --user restart kx-frame-controller-manager",
+  "update.disabled": "Automatic updates are turned off in the configuration",
+  "update.not_due": "update.check_interval_h has not passed since the last check",
+  "update.busy": "Another update is running",
+  "update.rejected": "{tag} failed to start after a previous update, so it is skipped. Run update by hand to install it anyway",
+  "update.applied": "Replaced with {tag}. The unit is not running, so it was not restarted",
+  "update.restarted": "Replaced with {tag}, restarted the unit, and confirmed it started",
+  "update.rolled_back": "Replaced with {tag}, but it did not start, so rolled back to {version}",
+  "update.rollback_failed": "{tag} did not start and rolling back failed. Reinstall {path}",
   "update.failed": "Failed to replace the executable. The current one is left as is",
   "error.config_reload": "Failed to reload the configuration",
   "error.steamvr_open": "Failed to connect to SteamVR",
@@ -41,5 +44,6 @@
   "error.steamvr_register": "Failed to register the vrmanifest",
   "error.tick": "Failed in the main loop",
   "error.power_off": "Failed to detect the long press",
-  "error.power_save": "Failed in power saving"
+  "error.power_save": "Failed in power saving",
+  "error.update": "Failed in automatic update"
 }

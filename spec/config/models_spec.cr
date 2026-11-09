@@ -24,6 +24,8 @@ describe Config::Root do
     root.frame_link.port.should eq 27062
     root.update.check_enabled.should be_true
     root.update.channel.should eq "stable"
+    root.update.auto_update.should be_true
+    root.update.check_interval_h.should eq 6
     root.log_level.should eq "info"
     root.language.should eq "auto"
   end

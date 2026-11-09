@@ -50,6 +50,21 @@ module Runtime
       File.join(state_directory, "power_save.json")
     end
 
+    # 自動更新の状態（最後に確かめた時刻、戻した版）。
+    def self.update_state_path : String
+      File.join(state_directory, "update.json")
+    end
+
+    # 常駐が起動したときに残す印。自動更新が、置き換えた版の起動を確かめるのに使う。
+    def self.running_marker_path : String
+      File.join(state_directory, "running.json")
+    end
+
+    # 更新を 1 つずつ走らせるための排他のファイル。
+    def self.update_lock_path : String
+      File.join(state_directory, "update.lock")
+    end
+
     # systemd のユーザーユニット（仕様書 6.2 節）。
     def self.systemd_unit_path(env = ENV) : String
       File.join(xdg("XDG_CONFIG_HOME", ".config", env), "systemd", "user", "kx-frame-controller-manager.service")

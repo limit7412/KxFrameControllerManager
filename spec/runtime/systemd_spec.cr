@@ -37,10 +37,14 @@ describe Runtime::Systemd do
       Runtime::Systemd.install("/home/deck/.local/bin/kx", path, systemctl).should be_true
 
       File.read(path).should contain %(ExecStart="/home/deck/.local/bin/kx" run)
+      user = File.dirname(path)
+      File.read(File.join(user, Runtime::Systemd::UPDATE_UNIT_NAME)).should contain %(ExecStart="/home/deck/.local/bin/kx" update --auto)
+      File.read(File.join(user, Runtime::Systemd::UPDATE_TIMER_NAME)).should contain "OnUnitActiveSec=30min"
       systemctl.calls.should eq [
         ["daemon-reload"],
         ["enable", Runtime::Systemd::UNIT_NAME],
         ["restart", Runtime::Systemd::UNIT_NAME],
+        ["enable", "--now", Runtime::Systemd::UPDATE_TIMER_NAME],
       ]
     ensure
       FileUtils.rm_rf(directory)
@@ -52,12 +56,18 @@ describe Runtime::Systemd do
     begin
       Dir.mkdir_p(directory)
       path = File.join(directory, Runtime::Systemd::UNIT_NAME)
-      File.write(path, "x")
+      update_unit = File.join(directory, Runtime::Systemd::UPDATE_UNIT_NAME)
+      timer = File.join(directory, Runtime::Systemd::UPDATE_TIMER_NAME)
+      [path, update_unit, timer].each { |file| File.write(file, "x") }
       systemctl = FakeSystemctl.new
       Runtime::Systemd.uninstall(path, systemctl).should be_true
 
-      File.exists?(path).should be_false
-      systemctl.calls.should eq [["disable", "--now", Runtime::Systemd::UNIT_NAME], ["daemon-reload"]]
+      [path, update_unit, timer].each { |file| File.exists?(file).should be_false }
+      systemctl.calls.should eq [
+        ["disable", "--now", Runtime::Systemd::UPDATE_TIMER_NAME],
+        ["disable", "--now", Runtime::Systemd::UNIT_NAME],
+        ["daemon-reload"],
+      ]
     ensure
       FileUtils.rm_rf(directory)
     end
