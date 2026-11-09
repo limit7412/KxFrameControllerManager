@@ -5,10 +5,98 @@ on:
     branches: [master]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
+  # CI で確かめる対象の変更かどうかを判定する。
+  #
+  # ドキュメントだけの PR でも、必須のチェックが届かなければマージできない。
+  # `on` の `paths` フィルタで起動自体を止めると、ワークフローが走らずチェックが待ちのまま残る。
+  # ジョブの `if` で飛ばしたものは「スキップ」として報告され、必須のチェックを満たす。
+  # そのため起動はいつも行い、判定はジョブで行う。
+  #
+  # 判定できなかった場合は確かめる側へ倒す。黙って飛ばすと、壊れた変更が通る。
+  changes:
+    name: 変更したパスを見る
+    runs-on: ubuntu-latest
+    outputs:
+      relevant: ${{ steps.check.outputs.relevant }}
+    steps:
+      - id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            BEFORE="$PR_BASE"
+            AFTER="$PR_HEAD"
+          else
+            BEFORE="$PUSH_BEFORE"
+            AFTER="$HEAD"
+          fi
+
+          # ブランチ作成時や force push 後は、比較の起点が無いか到達できない
+          if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # 1 ファイルにつき 1 行を出す。リネームで対象外へ移した変更も拾えるよう、旧パスも並べる。
+          # 三点の比較は、PR では分岐点からの差分になる。base 側で進んだ変更を拾わない。
+          JQ='.files[] | [.filename, (.previous_filename // "")] | @tsv'
+          # compare の `files` が返すのは最大 300 件
+          FILE_LIMIT=300
+
+          if ! CHANGED=$(gh api --paginate "repos/$REPO/compare/$BEFORE...$AFTER" --jq "$JQ"); then
+            echo "::warning::変更ファイルの一覧を取得できなかったため CI を実行します"
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # CI が確かめるもの（書式、単体テスト、シェルスクリプト、ビルド、tar.gz）に関わるパス。
+          #
+          # LICENSE と THIRD-PARTY-NOTICES.md は tar.gz へ同梱するため、package.sh の検査に関わる。
+          # ワークフローは ci.yml と複合アクションだけを対象にする。ほかのワークフローは CI では動かない。
+          # docs/ と、そのほかの Markdown はどの検査にも関わらない。
+          RELEVANT=false
+          COUNT=0
+          while IFS=$'\t' read -r NEW_PATH OLD_PATH; do
+            [ -n "$NEW_PATH" ] || continue
+            COUNT=$((COUNT + 1))
+            for FILE in "$NEW_PATH" "$OLD_PATH"; do
+              [ -n "$FILE" ] || continue
+              case "$FILE" in
+                src/*|spec/*|locales/*|actions/*|packaging/*|scripts/*|shard.yml|shard.lock|LICENSE|THIRD-PARTY-NOTICES.md|.github/workflows/ci.yml|.github/actions/*)
+                  echo "CI の対象になる変更: $FILE"
+                  RELEVANT=true
+                  ;;
+              esac
+            done
+          done <<< "$CHANGED"
+
+          if [ "$RELEVANT" = "false" ] && [ "$COUNT" -ge "$FILE_LIMIT" ]; then
+            echo "::warning::変更ファイルが上限の${FILE_LIMIT}件に達し一覧が不完全な可能性があるため CI を実行します"
+            RELEVANT=true
+          fi
+
+          if [ "$RELEVANT" = "false" ]; then
+            echo "::notice::CI の対象になる変更が無いため、検査とビルドをスキップします"
+          fi
+          echo "relevant=$RELEVANT" >> "$GITHUB_OUTPUT"
+
   # 書式と単体テストと aarch64 向けの型検査を先に回して、arm のランナーを待たずに壊れているとわかるようにする。
   check:
     name: 書式、単体テスト、型検査 (Linux x86_64)
+    needs: changes
+    if: needs.changes.outputs.relevant == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7.0.1
@@ -35,6 +123,8 @@ jobs:
 
   build:
     name: ビルド (Linux aarch64)
+    needs: changes
+    if: needs.changes.outputs.relevant == 'true'
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v7.0.1
