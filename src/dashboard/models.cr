@@ -36,7 +36,7 @@ module Dashboard
     power_save_pending : Bool,
     # HMD の明るさの範囲。読めなければ nil。
     gain_range : {Float64, Float64}?,
-    # 最後に読んだ設定ファイルの誤り。
+    # 最後に読んだ設定ファイルの誤り。表示する言語の文にしてある。
     config_errors : Array(String),
     update : UpdateStatus do
     def hand(hand : PowerOff::Hand) : HandStatus
@@ -81,6 +81,7 @@ module Dashboard
       "power_save.performance_profile" => Field.new("power_save.performance_profile", FieldKind::Toggle),
       "update.auto_update"             => Field.new("update.auto_update", FieldKind::Toggle),
       "update.check_interval_h"        => Field.new("update.check_interval_h", FieldKind::Stepper, 1.0, 1.0, 168.0),
+      "language"                       => Field.new("language", FieldKind::Choice),
     }
 
     # 自動更新の間隔（時間）の段。1 時間ずつでは 168 時間まで遠いため、決まった段を順に動く。
@@ -95,9 +96,11 @@ module Dashboard
     # direction は +1 か -1 で、Toggle では使わない。
     # buttons は長押しに割り当てられるボタンで、Choice の input.*_button が使う。
     # gain_range は HMD の明るさの範囲で、分からなければ nil を渡す。
+    # languages は設定 language に書ける値（auto と、辞書のある言語）を、画面で切り替える順に並べたものである。
     def self.apply(root : Config::Root, key : String, direction : Int32,
                    buttons : Hash(PowerOff::Hand, Array(String)),
-                   gain_range : {Float64, Float64}? = nil) : Config::Root
+                   gain_range : {Float64, Float64}? = nil,
+                   languages : Array(String) = ["auto"]) : Config::Root
       field = FIELDS[key]? || raise ArgumentError.new("知らない項目: #{key}")
       next_root = root.dup_snapshot
       case key
@@ -123,6 +126,8 @@ module Dashboard
         next_root.power_off.target = cycle(Config::PowerOffTarget.values, root.power_off.target, direction)
       when "input.priority"
         next_root.input.priority = cycle(Config::InputPriority.values, root.input.priority, direction)
+      when "language"
+        next_root.language = cycle(languages, root.language, direction)
       when "power_off.hold_ms"
         hold = step(root.power_off.hold_ms, field, direction).to_i
         next_root.power_off.hold_ms = hold

@@ -32,6 +32,8 @@ module Dashboard
     property disconnect : Proc(Array(PowerOff::Hand), Array(PowerOff::Result)?) = ->(_hands : Array(PowerOff::Hand)) { nil.as(Array(PowerOff::Result)?) }
     # 長押しに割り当てられるボタン。
     property buttons : Hash(PowerOff::Hand, Array(String)) = {} of PowerOff::Hand => Array(String)
+    # 設定 language に書ける値。画面で切り替える順に並べる。
+    property languages : Array(String) = ["auto"]
     # 新しい版があるかだけを見る。check の結末の名前（up_to_date、available など）と、見つけた版を返す。
     property check_update : Proc({String, String?}) = -> { {"unknown", nil.as(String?)} }
     # 今すぐの更新を、常駐とは別のユニットで始める。始められたら真を返す。
@@ -314,7 +316,7 @@ module Dashboard
     private def change(key : String, direction : Int32) : Nil
       before = @config.current
       gain_range = @state.snapshot.try(&.gain_range)
-      root = Editor.apply(before, key, direction, @buttons, gain_range)
+      root = Editor.apply(before, key, direction, @buttons, gain_range, @languages)
       errors = @config.save(root)
       if errors.empty?
         @state.message = nil
@@ -322,7 +324,7 @@ module Dashboard
           @state.rebind_pending = true
         end
       else
-        @state.message = errors.first.to_s
+        @state.message = @view.describe(errors.first)
         @state.tone = Tone::Error
       end
     rescue exception : File::Error

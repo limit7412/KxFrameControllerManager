@@ -26,9 +26,10 @@ module Dashboard
 
     LIBRARY_NAMES = %w[libcairo.so.2 libcairo.so]
 
-    # 文字に使うフォント。fontconfig が名前から探す。
+    # 文字に使うフォントの既定。fontconfig が名前から探す。
     # cairo の簡易な文字の API は、1 つのフォントに無い字を別のフォントで補わない。
-    # かなと漢字と英数字をすべて持つ Noto Sans CJK JP を指定する。
+    # Noto Sans CJK はかな、漢字、ハングル、ラテン文字、キリル文字をすべて持つ。
+    # 言語ごとの書体（簡体字なら SC）は、画面が font_family で切り替える。
     FONT_FAMILY = "Noto Sans CJK JP"
 
     FORMAT_ARGB32      = 0
@@ -250,7 +251,7 @@ module Dashboard
 
     private def font(size : Float64, bold : Bool) : Nil
       weight = bold ? FONT_WEIGHT_BOLD : FONT_WEIGHT_NORMAL
-      @functions.select_font_face.call(@context, FONT_FAMILY.to_unsafe, FONT_SLANT_NORMAL, weight)
+      @functions.select_font_face.call(@context, font_family.to_unsafe, FONT_SLANT_NORMAL, weight)
       @functions.set_font_size.call(@context, size)
     end
 

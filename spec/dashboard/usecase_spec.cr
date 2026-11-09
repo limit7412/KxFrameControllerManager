@@ -367,3 +367,52 @@ describe Dashboard::View do
     hits.none?(&.action.starts_with?("disconnect:")).should be_true
   end
 end
+
+describe "Dashboard::View の多言語" do
+  translate = ->(key : String, vars : Hash(String, String)) { Runtime::I18n.t(key, vars) }
+  names = Runtime::I18n::CODES.to_h { |code| {code, Runtime::I18n.native_name(code)} }
+
+  after_each { Runtime::I18n.locale = Runtime::I18n::DEFAULT_LOCALE }
+
+  it "全般のタブに表示言語を出し、auto では今の言語の名前を添える" do
+    Runtime::I18n.locale = "ko"
+    state = Dashboard::ViewState.new
+    state.tab = Dashboard::Tab::General
+    canvas = Fakes::Canvas.new
+    Dashboard::View.new(translate, "", names).render(canvas, state, Config::Root.default)
+    canvas.texts.should contain "자동 (한국어)"
+    canvas.texts.should contain "표시 언어"
+    # 機械翻訳の言語では、そうと分かる文を出す。
+    canvas.texts.join.should contain "기계 번역"
+  end
+
+  it "言語を指定したときは、その言語での名前を出す" do
+    root = Config::Root.default
+    root.language = "zh-Hant"
+    state = Dashboard::ViewState.new
+    state.tab = Dashboard::Tab::General
+    canvas = Fakes::Canvas.new
+    Dashboard::View.new(translate, "", names).render(canvas, state, root)
+    canvas.texts.should contain "繁體中文"
+    canvas.texts.join.should_not contain "機械翻訳です"
+  end
+
+  it "書体は言語の辞書に従う" do
+    Runtime::I18n.locale = "zh-Hans"
+    canvas = Fakes::Canvas.new
+    Dashboard::View.new(translate, "", names).render(canvas, Dashboard::ViewState.new, Config::Root.default)
+    canvas.font_family.should eq "Noto Sans CJK SC"
+  end
+
+  # 枠に収まらない文字列は、小さくしても収まらなければ末尾を「…」で切る。
+  it "枠に収まらない項目名は末尾を切る" do
+    long = ->(key : String, vars : Hash(String, String)) do
+      key == "dashboard.field.power_off.enabled" ? "x" * 80 : Runtime::I18n.t(key, vars)
+    end
+    canvas = Fakes::Canvas.new
+    Dashboard::View.new(long, "", names).render(canvas, Dashboard::ViewState.new, Config::Root.default)
+    cut = canvas.texts.find(&.starts_with?("xxxx")).not_nil!
+    cut.should end_with "…"
+    cut.size.should be < 80
+  end
+end

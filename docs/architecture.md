@@ -203,4 +203,5 @@ vrmanifest は接続のたびに書き出し直して登録する。
 - **既定バインドの controller_type**：Steam Frame のコントローラーは `frame_controller` である。SteamVR のドライバの入力プロファイル（`drivers/frame_controller/resources/input/frame_controller_profile.json`）に、左の `/input/view` と右の `/input/menu` がある。
 - **CLI が SteamVR につながらないときの disconnect**：`left` と `right` は 27062 の一覧が報告する左右だけで決める（仕様書 4.3 節）。どちらの手か 1 台に決まらなければ切らない。
 - **未設定のキーの判定**：IVRSettings は、既定値を持つキーなら未設定でも既定値を返す。未設定と分かるのは、既定値も無いキー（`UnsetSettingHasNoDefault`）だけである。`analogGain` が既定値を持つ場合、戻すときは消さずに読んだ既定値を書く。実機の振る舞いは 7.2 節の確認で見る。
-- **言語の決め方**：`language` が `auto` のときは、環境変数 `LC_ALL`、`LC_MESSAGES`、`LANG` の順に見る。Windows の表示言語に当たるものが無いためである。
+- **言語の決め方**：`language` が `auto` のときは、まず Steam の表示言語（`~/.steam/registry.vdf`）を見て、扱えなければ環境変数 `LC_ALL`、`LC_MESSAGES`、`LANG` を見る。Windows の表示言語に当たるものとして Steam の設定を使う。SteamOS ではシステムのロケールが英語のまま、Steam だけを日本語にしていることがあり、環境変数を先に見ると SteamVR と違う言語になる。
+- **扱う言語**：日本語と英語に加え、簡体字中国語、繁体字中国語、韓国語、ドイツ語、フランス語、スペイン語、ロシア語の辞書を持つ。日本語と英語以外は機械翻訳であり、辞書の `meta.machine_translated` でそうと示す。言語ごとの情報（Steam の言語名、POSIX のロケール名、SteamVR の札、画面の書体）は辞書の `meta.*` に書き、言語の追加はファイルを 1 つ足して `Runtime::I18n::CODES` に加えるだけで済むようにした。
