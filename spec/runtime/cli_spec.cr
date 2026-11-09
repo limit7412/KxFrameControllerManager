@@ -18,6 +18,16 @@ describe Runtime::CLI do
     Runtime::CLI.parse(["disconnect", "left", "right"]).error.should eq "cli.disconnect_needs_target"
   end
 
+  it "update は --auto だけを受け付ける" do
+    Runtime::CLI.parse(["update"]).argument.should be_nil
+    auto = Runtime::CLI.parse(["update", "--auto"])
+    auto.command.should eq Runtime::CLI::Command::Update
+    auto.argument.should eq Runtime::CLI::AUTO
+    auto.error.should be_nil
+    Runtime::CLI.parse(["update", "--force"]).error.should eq "cli.unexpected_argument"
+    Runtime::CLI.parse(["update", "--auto", "x"]).error.should eq "cli.unexpected_argument"
+  end
+
   it "引数を取らないコマンドへの引数と、不明なコマンドを誤りにする" do
     Runtime::CLI.parse(["status", "x"]).error.should eq "cli.unexpected_argument"
     unknown = Runtime::CLI.parse(["foo"])

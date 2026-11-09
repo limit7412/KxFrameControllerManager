@@ -30,7 +30,7 @@ curl -fsSL https://raw.githubusercontent.com/limit7412/KxFrameControllerManager/
 3. 展開して中の `install.sh` を実行し、終わったら作業用のディレクトリを消す
 
 `install.sh` は実行ファイルを `~/.local/bin/kx-frame-controller-manager` へ置き、`kx-frame-controller-manager install` を呼ぶ。
-`install` は systemd のユーザーユニットを `~/.config/systemd/user/` へ書き出し、有効にして起動する。
+`install` は systemd のユーザーユニットと自動更新のタイマーを `~/.config/systemd/user/` へ書き出し、有効にして起動する。
 ログインしている間は常駐し、SteamVR が動いていなければ何もせずに待つ。
 
 最新の正式リリースが選ばれるのは、GitHub の `/releases/latest` が正式リリースだけを指すためである。
@@ -41,7 +41,7 @@ curl -fsSL https://raw.githubusercontent.com/limit7412/KxFrameControllerManager/
 curl -fsSL https://raw.githubusercontent.com/limit7412/KxFrameControllerManager/master/packaging/get.sh | bash -s -- --version 0.1.0
 ```
 
-プレリリースを入れたあと `update` でもプレリリースを追うには、設定の `update.channel` を `test` にする（[設定リファレンス](configuration.md)）。
+プレリリースを入れたあと自動更新と `update` でもプレリリースを追うには、設定の `update.channel` を `test` にする（[設定リファレンス](configuration.md)）。
 
 ### tar.gz を手で入れる
 
@@ -115,9 +115,13 @@ journalctl --user -u kx-frame-controller-manager      # ログ
 
 ## 更新と削除
 
+新しい版は、既定では 6 時間ごとに自動で確かめて置き換える。
+置き換えた版が起動しなければ、元の版へ戻す。
+間隔の変え方と止め方は[設定リファレンス](configuration.md)の `update` にある。
+
 ```sh
-~/.local/bin/kx-frame-controller-manager update     # 新しい版があれば置き換えて起動し直す
-~/.local/bin/kx-frame-controller-manager uninstall  # ユニットを止めて消す
+~/.local/bin/kx-frame-controller-manager update     # 待たずに確かめ、新しい版があれば置き換えて起動し直す
+~/.local/bin/kx-frame-controller-manager uninstall  # ユニットとタイマーを止めて消す
 ```
 
 導入の 1 行をもう一度実行しても、最新の版へ置き換えて起動し直す。
@@ -126,7 +130,7 @@ journalctl --user -u kx-frame-controller-manager      # ログ
 すべて消すときは、続けて次を消す。
 
 ```sh
-rm -f ~/.local/bin/kx-frame-controller-manager
+rm -f ~/.local/bin/kx-frame-controller-manager ~/.local/bin/kx-frame-controller-manager.old
 rm -rf ~/.config/KxFrameControllerManager ~/.local/share/KxFrameControllerManager ~/.local/state/KxFrameControllerManager
 ```
 

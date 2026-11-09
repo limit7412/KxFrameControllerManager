@@ -44,6 +44,12 @@ src/
     usecase.cr                       タブの作成と破棄、操作の受け取り、描き直し、手動の切断
   config/                          設定
   update/                          更新
+    models.cr                        版、添付、リリース
+    repository.cr                    GitHub Releases から取る
+    usecase.cr                       新しい版を探す
+    installer.cr                     取得、照合、置き換え、元の実行ファイルの退避と巻き戻し
+    state.cr                         自動更新の状態（確かめた時刻、戻した版）、起動の印、排他
+    auto_updater.cr                  自動更新の流れ（試しの起動、再起動、起動の確かめ、巻き戻し）
   runtime/                         実行環境
     paths.cr                         設定、ログ、マニフェスト、ユニットの置き場所
     logging.cr                       日次ローテーションのログと標準エラーへの出力
@@ -71,7 +77,7 @@ scripts/                           build.sh / verify.sh / package.sh
 - `power_off` は他のどのコンテキストにも依存しない。ただし設定の型（`config/models`）だけは参照する。
 - `power_save` は `power_off` の `DisconnectRepository` を使う。入る直前に 27062 の一覧を確かめるためである。
 - `steamvr` は `power_off` の `InputRepository`、`HapticRepository`、`DeviceRepository` と、`power_save` の `SettingsRepository` を、`frame_link` は `DisconnectRepository` を継承して実装する。
-- `runtime` は usecase を呼ぶだけで、ロジックを持たない。
+- `runtime` は usecase を呼ぶだけで、ロジックを持たない。`runtime/systemd` は `update` の `ServiceControl` を継承して実装する。自動更新が常駐のユニットを再起動するためである。
 - `dashboard` は `steamvr` の repository（オーバーレイの部分）、`config` の usecase、`power_off` の型だけを参照する。常駐の部品には `main.cr` が渡す Proc を通して触れる。
 - FFI の宣言はコンテキスト内の `ffi.cr` に隔離し、同じコンテキストの repository だけが参照する。
 
@@ -177,7 +183,8 @@ vrmanifest は接続のたびに書き出し直して登録する。
 - **Crystal の版**：仕様書は 1.14.0 の aarch64 版を使うとしていたが、1.14.0 には aarch64 Linux 向けの公式の配布物が無い。`crystal-lang/install-crystal` は公式の配布物を取りに行くため、arm のランナーで 1.14.0 は入らない。aarch64 Linux 向けの配布物がある 1.19.1 に上げた。x86_64 の検査のジョブも同じ版に揃えてある。1.19 では Linux のイベントループが libevent を使わなくなっており、静的に取り込むライブラリが 1 つ減った。
 - **静的リンクの方法**：Crystal の `--static` は glibc ごと静的にしようとするので使わない。静的ライブラリへのリンクだけを集めたディレクトリをリンカの探索の先頭に置き、glibc 以外を静的に取り込む。詳しくは `scripts/build.sh` のコメントにある。`-static-libgcc` も付け、動的な依存を glibc だけにしてある。
 - **CA 証明書の場所**：OpenSSL を静的に取り込むと、証明書を探す既定の場所がビルドした Ubuntu のもの（`/usr/lib/ssl`）になる。SteamOS は Arch Linux 系で、そこには無い。更新の確認が HTTPS で失敗しないよう、`/etc/ssl/certs/ca-certificates.crt` などを探して渡す。`SSL_CERT_FILE` で上書きできる。
-- **更新の置き換え**：Linux では走っている実行ファイルの上へリネームで重ねられる。KxNotifyUtils の Windows 版にあった `.old` への退避と巻き戻しは無くした。
+- **更新の置き換え**：Linux では走っている実行ファイルの上へリネームで重ねられる。置き換えそのものに `.old` への退避は要らないが、自動更新で新しい版が起動しなかったときに戻す先として、置き換える前の実行ファイルを `.old` へハードリンクで残す。
+- **自動更新**：仕様書は `update` コマンドでの置き換えだけを決めていた。systemd のタイマーから `update --auto` を起こし、置き換えた後に常駐を再起動して起動を確かめ、起動しなければ戻す流れを足した。常駐の中で行わないのは、常駐が自分を再起動すると、新しい版の起動を確かめる前に自分が止まり、戻す者がいなくなるためである。流れは[設定リファレンス](configuration.md)の `update` にある。
 - **プレリリースの起点**：KxNotifyUtils は安定版のタグが無いとプレリリースを作れなかった。こちらは最初の安定版を出す前から試せるよう、タグが無ければ 0.0.0 を起点にして `0.0.1-testN` を作る。
 - **エラーの知らせ方**：トレイが無いため、`Error::Usecase` はログへ残すだけにした。systemd 下ではログが標準エラーにも出るため、`journalctl --user` でも読める。
 - **IVRInput と IVRSettings の版**：仕様書はヘッドセットの `openvr_capi.h` から決めるとしていたが、まだ読めていない。OpenVR SDK の master の `openvr_capi.h` と同じ版にし、初期化のたびに `VR_IsInterfaceVersionValid` で確かめる。通らなければその機能だけを止める。

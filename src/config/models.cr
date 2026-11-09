@@ -132,6 +132,11 @@ module Config
     property check_enabled : Bool = true
     # 追うチャンネル。"stable" は安定版だけ、"test" はプレリリースも見る。
     property channel : String = "stable"
+    # 新しい版を見つけたら、systemd のタイマーが置き換えて再起動するか。
+    # check_enabled が偽なら、これが真でも確かめない。
+    property auto_update : Bool = true
+    # 自動更新で確かめる間隔（時間）。タイマーは 30 分ごとに起き、この間隔が経っていなければ何もしない。
+    property check_interval_h : Int32 = 6
 
     def initialize
     end

@@ -52,7 +52,9 @@ CLI は設定ファイルを書き出さず、無いときや不正なときは�
   },
   "update": {
     "check_enabled": true,
-    "channel": "stable"
+    "channel": "stable",
+    "auto_update": true,
+    "check_interval_h": 6
   },
   "log_level": "info",
   "language": "auto"
@@ -166,8 +168,36 @@ SteamVR のダッシュボードに出す設定画面のタブ。
 
 | キー | 既定 | 範囲 | 意味 |
 | --- | --- | --- | --- |
-| `check_enabled` | `true` | | 常駐の起動時に新しい版を探し、見つけたらログに残すか。置き換えは `update` コマンドで行う |
-| `channel` | `"stable"` | `stable` / `test` | `stable` は安定版だけを、`test` はプレリリースも見る |
+| `check_enabled` | `true` | | 新しい版を探すか。偽なら自動更新も止まる |
+| `channel` | `"stable"` | `stable` / `test` | `stable` は安定版だけを、`test` はプレリリースも見る。自動更新と `update` コマンドの両方に効く |
+| `auto_update` | `true` | | 新しい版を見つけたら、自動で置き換えて常駐を起動し直すか。偽なら、常駐の起動時に見つけた版をログに残すだけにする。自動更新のタイマーが無い環境（自動更新より前の版から `update` で上げた場合）でも同じくログに残し、`install` のやり直しを促す |
+| `check_interval_h` | `6` | 1 から 168 | 自動更新が新しい版を探す間隔（時間） |
+
+### 自動更新の流れ
+
+自動更新は、`install` が書き出す systemd のタイマー（`kx-frame-controller-manager-update.timer`）が受け持つ。
+タイマーは 30 分ごとに `update --auto` を起こし、前回の確認から `check_interval_h` が経っていれば次のとおり進める。
+
+1. GitHub Releases から `channel` に合う最新の版を探す
+2. 新しければ実行ファイルを `~/.local/bin/kx-frame-controller-manager.new` へ取り、digest と照合する
+3. 取ったものを `version` で試しに起動し、その版を名乗ることを確かめる。ヘッドセットで起動できない添付（glibc の版やアーキテクチャの誤り）はここで落ちる
+4. 今の実行ファイルを `kx-frame-controller-manager.old` へ残してから置き換える
+5. 常駐が動いていれば再起動し、新しい版が 60 秒以内に起動の印（`~/.local/state/KxFrameControllerManager/running.json`）を残すこと、その後 20 秒落ちずに動き続けることを確かめる
+6. 確かめられなければ `.old` へ戻して再起動し、その版を `~/.local/state/KxFrameControllerManager/update.json` に覚える。覚えた版は自動では二度と入れない
+
+手で `update` を実行したときも同じ流れで置き換え、起動を確かめ、起動しなければ戻す。
+手で実行したときは `auto_update` と `check_interval_h` を見ず、自動更新が覚えた版も入れる。
+利用者が明示的に入れようとしているためである。
+
+間隔の判定を実行ファイルの側に置いたのは、`check_interval_h` を変えるたびにタイマーを書き換えずに済むようにするためである。
+設定を変えた後は、`systemctl --user reload` も `install` のやり直しも要らない。次にタイマーが起きたときに読まれる。
+
+自動更新の記録は次で読める。
+
+```sh
+systemctl --user list-timers kx-frame-controller-manager-update.timer
+journalctl --user -u kx-frame-controller-manager-update
+```
 
 ## 全般
 

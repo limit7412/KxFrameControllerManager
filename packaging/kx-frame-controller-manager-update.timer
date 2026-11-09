@@ -1,0 +1,16 @@
+# KxFrameControllerManager の自動更新を起こすタイマー。
+#
+# 30 分ごとに起きるが、実際に GitHub を見るのは設定の update.check_interval_h が経ったときだけである。
+# 間隔を設定で変えるたびにタイマーを書き換えずに済むよう、間隔の判定は実行ファイルの側で行う。
+
+[Unit]
+Description=Check for KxFrameControllerManager updates
+
+[Timer]
+# 起動直後は SteamVR の立ち上がりと重なるため、少し待つ。
+OnBootSec=5min
+OnUnitActiveSec=30min
+RandomizedDelaySec=5min
+
+[Install]
+WantedBy=timers.target
