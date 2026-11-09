@@ -73,14 +73,10 @@ module Dashboard
       return unless ensure_overlay
       main = @main.not_nil!
 
+      # 期限切れの確認は、クリックを処理する前に取り消す。後にすると、4 秒を過ぎた 2 回目で切れてしまう。
+      expire_arm(now)
       @repository.poll_overlay_events(main).each { |event| handle(event, now) }
       @visible = @repository.overlay_visible?(main)
-
-      if (armed_at = @armed_at) && now - armed_at >= ARM_TIMEOUT
-        @state.armed = nil
-        @armed_at = nil
-        @dirty = true
-      end
 
       return unless @visible
       refresh_status(now)
@@ -195,6 +191,7 @@ module Dashboard
     # 切断は 2 回押しで動かす。VR の中では誤って触れやすく、確認のダイアログも出せない。
     private def press_disconnect(target : String, now : Time::Instant) : Nil
       return if @state.running?
+      expire_arm(now)
       unless @state.armed == target
         @state.armed = target
         @armed_at = now
@@ -227,6 +224,14 @@ module Dashboard
           @dirty = true
         end
       end
+    end
+
+    private def expire_arm(now : Time::Instant) : Nil
+      armed_at = @armed_at
+      return unless armed_at && now - armed_at >= ARM_TIMEOUT
+      @state.armed = nil
+      @armed_at = nil
+      @dirty = true
     end
 
     private def finish_disconnect(results : Array(PowerOff::Result)?) : Nil

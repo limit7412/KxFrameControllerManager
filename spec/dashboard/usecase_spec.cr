@@ -140,6 +140,18 @@ describe Dashboard::Usecase do
     usecase.state.armed.should be_nil
   end
 
+  it "時間が経ってからの 2 回目は、1 回目として扱う" do
+    usecase, _, _, _ = build
+    called = false
+    usecase.disconnect = ->(_hands : Array(PowerOff::Hand)) { called = true; nil.as(Array(PowerOff::Result)?) }
+    now = Time.instant
+    usecase.act("disconnect:left", now)
+    usecase.act("disconnect:left", now + Dashboard::Usecase::ARM_TIMEOUT)
+    sleep 10.milliseconds
+    called.should be_false
+    usecase.state.armed.should eq "left"
+  end
+
   it "処理中で受け付けられなければ知らせる" do
     usecase, _, _, _ = build
     usecase.disconnect = ->(_hands : Array(PowerOff::Hand)) { nil.as(Array(PowerOff::Result)?) }
