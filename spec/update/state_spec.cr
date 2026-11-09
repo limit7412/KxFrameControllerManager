@@ -75,6 +75,11 @@ describe Update::FileStateStore do
       store.unlock
       other.try_lock.should be_true
       other.unlock
+
+      # 待って取る側が持っている間は、try_lock は取れない。
+      store.lock
+      other.try_lock.should be_false
+      store.unlock
     end
   end
 end

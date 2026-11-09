@@ -112,6 +112,14 @@ module Update
       true
     end
 
+    # 排他が外れるまで待って取る。`uninstall` が、走っている自動更新の終わりを待つのに使う。
+    def lock : Nil
+      Dir.mkdir_p(File.dirname(@lock_path))
+      file = File.open(@lock_path, "a")
+      file.flock_exclusive
+      @lock = file
+    end
+
     def unlock : Nil
       if file = @lock
         file.flock_unlock

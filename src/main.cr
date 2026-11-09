@@ -192,14 +192,18 @@ module KxFrameControllerManager
     private def check_update : Nil
       update = @config.current.update
       return unless update.check_enabled
-      # 自動更新が有効なら、タイマーが確かめて置き換える。ここで重ねて API を叩かない。
-      return if update.auto_update
+      # 自動更新が有効でタイマーもあるなら、タイマーが確かめて置き換える。ここで重ねて API を叩かない。
+      # タイマーが無い（自動更新より前の版から `update` で上げた）環境では、従来どおりここで確かめて知らせる。
+      return if update.auto_update && Runtime::Systemd.update_timer_installed?
 
       spawn(name: "check_update") do
         usecase = Update::Usecase.new(Update::GitHubRepository.new("KxFrameControllerManager/#{VERSION}"))
         result = usecase.check(VERSION, update.channel)
         if release = result.release
           Log.info { "新しい版 #{release.tag} が出ている。`kx-frame-controller-manager update` で置き換えられる" }
+          if update.auto_update
+            Log.info { "自動更新のタイマーが無い。`kx-frame-controller-manager install` をやり直すと自動で置き換わる" }
+          end
         end
       end
     end
@@ -352,7 +356,14 @@ module KxFrameControllerManager
     end
 
     def uninstall : Int32
-      if Runtime::Systemd.uninstall
+      state = Update::FileStateStore.new(Runtime::Paths.update_state_path, Runtime::Paths.running_marker_path, Runtime::Paths.update_lock_path)
+      # 排他は消し終わるまで持つ。その間に手で打った `update` が置き換えを始めないようにする。
+      removed = begin
+        Runtime::Systemd.uninstall(wait_for_update: -> { state.lock; nil })
+      ensure
+        state.unlock
+      end
+      if removed
         puts t("uninstall.done")
         0
       else

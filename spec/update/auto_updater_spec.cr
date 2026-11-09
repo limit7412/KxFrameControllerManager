@@ -27,6 +27,7 @@ private class MemoryStateStore < Update::StateStore
   property state = Update::State.new
   property marker : Update::RunningMarker? = nil
   property locked = false
+  property save_error : Exception? = nil
   getter saves = 0
 
   def load : Update::State
@@ -35,6 +36,9 @@ private class MemoryStateStore < Update::StateStore
 
   def save(state : Update::State) : Nil
     @saves += 1
+    if error = @save_error
+      raise error
+    end
     @state = Update::State.from_json(state.to_json)
   end
 
@@ -342,6 +346,19 @@ describe Update::AutoUpdater do
         fixture.service.restart_result = false
         fixture.updater.run(settings).outcome.should eq Update::RunOutcome::RolledBack
         File.read(fixture.executable).should eq "実行中の実行ファイル"
+      end
+    end
+
+    # 記録は巻き戻しの必須条件ではない。投げたまま抜けると、起動しない版が置かれたまま残る。
+    it "戻した版を記録できなくても元へ戻す" do
+      with_updater do |fixture|
+        fixture.service.on_restart = ->(_count : Int32) do
+          fixture.state.save_error = File::Error.new("空きが無い", file: "update.json")
+          nil
+        end
+        fixture.updater.run(settings).outcome.should eq Update::RunOutcome::RolledBack
+        File.read(fixture.executable).should eq "実行中の実行ファイル"
+        fixture.service.restarts.should eq 2
       end
     end
 

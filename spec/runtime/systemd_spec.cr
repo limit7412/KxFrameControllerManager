@@ -25,6 +25,19 @@ describe Runtime::Systemd do
     unit.should_not contain "@EXECUTABLE@"
   end
 
+  it "自動更新のタイマーが書き出されているかを見る" do
+    directory = File.tempname("kxfcm-systemd")
+    begin
+      Dir.mkdir_p(directory)
+      path = File.join(directory, Runtime::Systemd::UNIT_NAME)
+      Runtime::Systemd.update_timer_installed?(path).should be_false
+      File.write(File.join(directory, Runtime::Systemd::UPDATE_TIMER_NAME), "x")
+      Runtime::Systemd.update_timer_installed?(path).should be_true
+    ensure
+      FileUtils.rm_rf(directory)
+    end
+  end
+
   it "ExecStart を壊す文字を含むパスは受け付けない" do
     expect_raises(ArgumentError) { Runtime::Systemd.unit(%(/home/deck/"x)) }
   end
@@ -60,7 +73,10 @@ describe Runtime::Systemd do
       timer = File.join(directory, Runtime::Systemd::UPDATE_TIMER_NAME)
       [path, update_unit, timer].each { |file| File.write(file, "x") }
       systemctl = FakeSystemctl.new
-      Runtime::Systemd.uninstall(path, systemctl).should be_true
+      # 走っている自動更新を待つのは、タイマーを止めた後、常駐を止める前である。
+      waited_after = nil.as(Array(Array(String))?)
+      Runtime::Systemd.uninstall(path, systemctl, -> { waited_after = systemctl.calls.dup; nil }).should be_true
+      waited_after.should eq [["disable", "--now", Runtime::Systemd::UPDATE_TIMER_NAME]]
 
       [path, update_unit, timer].each { |file| File.exists?(file).should be_false }
       systemctl.calls.should eq [

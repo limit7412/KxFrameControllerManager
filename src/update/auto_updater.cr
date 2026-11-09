@@ -280,10 +280,15 @@ module Update
       RunResult.new(RunOutcome::RollbackFailed, tag)
     end
 
+    # 覚えられなくても投げない。
+    # 巻き戻しの手前で呼ぶため、ここで投げると起動しない版が置かれたまま残る。
+    # 覚え損ねた版は次の確認でまた入れようとするが、そのときも同じく戻せる。
     private def reject(tag : String) : Nil
       state = @state.load
       state.reject(tag)
       @state.save(state)
+    rescue exception
+      Log.error(exception: exception) { "戻した版 #{tag} を記録できなかった" }
     end
 
     private def from_check(outcome : Outcome) : RunOutcome

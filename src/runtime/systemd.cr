@@ -68,6 +68,12 @@ module Runtime
       end
     end
 
+    # 自動更新のタイマーが書き出されているか。
+    # 自動更新より前の版から `update` で上げた環境には無い。`install` をやり直すまで置かれない。
+    def self.update_timer_installed?(unit_path : String = Paths.systemd_unit_path) : Bool
+      File.exists?(File.join(File.dirname(unit_path), UPDATE_TIMER_NAME))
+    end
+
     # 自動更新から常駐のユニットを操作する。
     class UpdateService < Update::ServiceControl
       def initialize(@systemctl : Systemctl = Systemctl.new)
@@ -109,9 +115,16 @@ module Runtime
     # ユニットを止めて無効にし、消す。
     #
     # 止めるのに失敗しても先へ進む。ユニットが既に無効な場合も disable は失敗を返しうるためである。
-    # タイマーを先に止める。消している途中で自動更新が走ると、実行ファイルを置き換えうる。
-    def self.uninstall(unit_path : String = Paths.systemd_unit_path, systemctl : Systemctl = Systemctl.new) : Bool
+    # タイマーを先に止め、走っている自動更新が終わるのを wait_for_update で待ってから常駐を止める。
+    # タイマーを止めても、既に起きた自動更新のユニットは止まらない。待たずに常駐を止めると、
+    # 自動更新は取得を終えた後に実行ファイルを置き換え、常駐が止まったのを起動の失敗と取り違えて巻き戻す。
+    def self.uninstall(
+      unit_path : String = Paths.systemd_unit_path,
+      systemctl : Systemctl = Systemctl.new,
+      wait_for_update : Proc(Nil) = -> { },
+    ) : Bool
       systemctl.run(["disable", "--now", UPDATE_TIMER_NAME])
+      wait_for_update.call
       systemctl.run(["disable", "--now", UNIT_NAME])
       directory = File.dirname(unit_path)
       File.delete?(unit_path)
