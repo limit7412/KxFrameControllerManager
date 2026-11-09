@@ -1,0 +1,9 @@
+{
+  "cli.usage": "Usage: kx-frame-controller-manager <command>\n\nCommands:\n  run      Run as a resident process (started by the systemd unit)\n  version  Print the version",
+  "cli.unknown_command": "Unknown command: {command}",
+  "cli.config_invalid": "The configuration has errors. Running with the previous (or default) settings:",
+  "error.config_reload": "Failed to reload the configuration",
+  "error.steamvr_open": "Failed to connect to SteamVR",
+  "error.steamvr_poll": "Failed to poll SteamVR events",
+  "error.steamvr_register": "Failed to register the vrmanifest"
+}

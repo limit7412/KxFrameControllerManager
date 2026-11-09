@@ -1,0 +1,15 @@
+name: kx_frame_controller_manager
+version: 0.1.0
+description: |
+  Steam Frame のヘッドセット上で常駐し、割り当てたボタンの長押しでコントローラーを切断する。
+
+authors:
+  - limit7412
+
+targets:
+  kx-frame-controller-manager:
+    main: src/main.cr
+
+crystal: ">= 1.19.0"
+
+license: MIT

@@ -1,0 +1,9 @@
+{
+  "cli.usage": "使い方: kx-frame-controller-manager <コマンド>\n\nコマンド:\n  run      常駐します。systemd のユニットから呼びます\n  version  版を表示します",
+  "cli.unknown_command": "不明なコマンドです: {command}",
+  "cli.config_invalid": "設定に誤りがあるため、直前の設定（または初期設定）で動きます:",
+  "error.config_reload": "設定の再読み込みに失敗した",
+  "error.steamvr_open": "SteamVR への接続に失敗した",
+  "error.steamvr_poll": "SteamVR のイベントの確認に失敗した",
+  "error.steamvr_register": "vrmanifest の登録に失敗した"
+}

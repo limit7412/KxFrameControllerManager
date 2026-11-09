@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  # 書式と単体テストと aarch64 向けの型検査を先に回して、arm のランナーを待たずに壊れているとわかるようにする。
+  check:
+    name: 書式、単体テスト、型検査 (Linux x86_64)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: crystal-lang/install-crystal@v1.9.5
+        with:
+          crystal: 1.19.1
+
+      - name: 書式を確かめる
+        run: crystal tool format --check src spec
+
+      - name: 単体テストを実行する
+        run: crystal spec
+
+      # 実際に配布するのは aarch64 版である。
+      # CPU で分岐するコード（libopenvr_api.so の置き場所など）は、ここで aarch64 として型検査する。
+      - name: aarch64 向けの型検査を行う
+        run: crystal build --cross-compile --target aarch64-unknown-linux-gnu src/main.cr -o kx
+
+  build:
+    name: ビルド (Linux aarch64)
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      # ビルドの手順はリリースとプレリリースでも使うため複合アクションに置いてある。
+      # CI とリリースで違う手順を踏むと、CI が通ったのにリリースで落ちる状態が起きる。
+      # 版は渡さない。配布物ではないため、ソースの既定値のままでよい。
+      - uses: $/.github/actions/build-linux-aarch64
+
+      - name: 単体テストを実行する
+        # 配布先と同じ CPU でも回す。FFI の構造体の大きさなどは CPU で変わりうる。
+        run: crystal spec
+
+      - name: 配布用の tar.gz を作る
+        # tar.gz を作るのはリリースとプレリリースだけなので、ここで動かさないと
+        # scripts/package.sh の誤りにリリースの時点まで気付けない。
+        id: package
+        run: ./scripts/package.sh
+
+      - name: 成果物を保存する
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: KxFrameControllerManager
+          path: |
+            kx-frame-controller-manager-linux-aarch64
+            ${{ steps.package.outputs.path }}

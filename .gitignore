@@ -1,0 +1,13 @@
+/docs/output/
+/lib/
+/bin/
+/.shards/
+*.dwarf
+
+# scripts/build.sh が作るもの
+/build/
+/kx-frame-controller-manager
+/kx-frame-controller-manager-linux-aarch64
+
+# scripts/package.sh が作る配布用の tar.gz
+/KxFrameControllerManager-*.tar.gz
