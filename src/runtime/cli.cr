@@ -15,20 +15,25 @@ module Runtime
       Help
     end
 
-    # 解釈の結果。argument は disconnect の対象（left、right、both、シリアル）に使う。
+    # 解釈の結果。argument は disconnect の対象（left、right、both、シリアル）と、update の --auto に使う。
     # error が入っていれば、使い方の誤りとして終了コード 2 で終える。
     record Parsed, command : Command, argument : String? = nil, error : String? = nil
+
+    AUTO = "--auto"
 
     def self.parse(args : Array(String)) : Parsed
       name = args.first?
       rest = args[1..]? || [] of String
       case name
-      when "run"                  then no_argument(Command::Run, rest)
-      when "status"               then no_argument(Command::Status, rest)
-      when "list"                 then no_argument(Command::List, rest)
-      when "install"              then no_argument(Command::Install, rest)
-      when "uninstall"            then no_argument(Command::Uninstall, rest)
-      when "update"               then no_argument(Command::Update, rest)
+      when "run"       then no_argument(Command::Run, rest)
+      when "status"    then no_argument(Command::Status, rest)
+      when "list"      then no_argument(Command::List, rest)
+      when "install"   then no_argument(Command::Install, rest)
+      when "uninstall" then no_argument(Command::Uninstall, rest)
+      when "update"
+        # --auto は自動更新のタイマーが付ける。設定の有効と間隔に従い、置き換えた版の起動を確かめる。
+        return Parsed.new(Command::Update, AUTO) if rest == [AUTO]
+        no_argument(Command::Update, rest)
       when "version", "--version" then Parsed.new(Command::Version)
       when nil                    then Parsed.new(Command::Help, error: "")
       when "help", "--help", "-h" then Parsed.new(Command::Help)

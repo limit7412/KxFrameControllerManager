@@ -1,5 +1,5 @@
 {
-  "cli.usage": "使い方: kx-frame-controller-manager <コマンド>\n\nコマンド:\n  run                    常駐します。systemd のユニットから呼びます\n  status                 SteamVR と 27062 の疎通、左右のシリアルと照合の結果を表示します\n  list                   27062 から取ったコントローラーの一覧を表示します\n  disconnect <対象>      長押しを経ずに切断します。対象は left、right、both、またはシリアルです\n  install                systemd のユーザーユニットを書き出して有効にします\n  uninstall              systemd のユーザーユニットを止めて消します\n  update                 新しい版があれば置き換え、ユニットを再起動します\n  version                版を表示します",
+  "cli.usage": "使い方: kx-frame-controller-manager <コマンド>\n\nコマンド:\n  run                    常駐します。systemd のユニットから呼びます\n  status                 SteamVR と 27062 の疎通、左右のシリアルと照合の結果を表示します\n  list                   27062 から取ったコントローラーの一覧を表示します\n  disconnect <対象>      長押しを経ずに切断します。対象は left、right、both、またはシリアルです\n  install                systemd のユーザーユニットと自動更新のタイマーを書き出して有効にします\n  uninstall              systemd のユーザーユニットを止めて消します\n  update [--auto]        新しい版があれば置き換え、ユニットを再起動して起動を確かめます。起動しなければ戻します。--auto は自動更新のタイマーが付けます\n  version                版を表示します",
   "cli.unknown_command": "不明なコマンドです: {command}",
   "cli.unexpected_argument": "このコマンドは引数を取りません: {argument}",
   "cli.disconnect_needs_target": "disconnect には対象（left、right、both、またはシリアル）を 1 つ指定してください",
@@ -29,11 +29,15 @@
   "update.unreachable": "更新を確かめられませんでした。ネットワークを確かめてください",
   "update.incomplete": "リリースの一覧を取りきれず、最新かどうかを確かめられませんでした",
   "update.unknown": "手元でビルドした版（{version}）のため、更新を確かめません",
-  "update.available": "新しい版があります",
-  "update.downloading": "{tag} を取得しています",
-  "update.applied": "{tag} へ置き換えました",
-  "update.restarted": "ユニットを再起動しました",
-  "update.restart_failed": "置き換えは済みましたが、ユニットを再起動できませんでした。systemctl --user restart kx-frame-controller-manager を実行してください",
+  "update.disabled": "設定で自動更新を切っているため確かめません",
+  "update.not_due": "前回の確認から update.check_interval_h が経っていないため確かめません",
+  "update.busy": "別の更新が走っているため何もしません",
+  "update.config_unreadable": "設定ファイルを読めないため、自動更新は行いません。設定を直すと次の確認から再開します",
+  "update.rejected": "{tag} は前に置き換えて起動しなかった版のため入れません。入れるには update を手で実行してください",
+  "update.applied": "{tag} へ置き換えました。ユニットが動いていないため再起動はしていません",
+  "update.restarted": "{tag} へ置き換えてユニットを再起動し、起動したことを確かめました",
+  "update.rolled_back": "{tag} へ置き換えましたが起動しなかったため、{version} へ戻しました",
+  "update.rollback_failed": "{tag} が起動せず、元の版へも戻せませんでした。{path} を入れ直してください",
   "update.failed": "置き換えに失敗しました。元の実行ファイルはそのまま残っています",
   "error.config_reload": "設定の再読み込みに失敗した",
   "error.steamvr_open": "SteamVR への接続に失敗した",
@@ -41,5 +45,6 @@
   "error.steamvr_register": "vrmanifest の登録に失敗した",
   "error.tick": "主ループの処理に失敗した",
   "error.power_off": "長押しの判定に失敗した",
-  "error.power_save": "省電力の処理に失敗した"
+  "error.power_save": "省電力の処理に失敗した",
+  "error.update": "自動更新の処理に失敗した"
 }

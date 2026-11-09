@@ -11,7 +11,10 @@ module Update
   # Linux では、走っている実行ファイルの上へ別のファイルをリネームで重ねられる。
   # 走っているプロセスは古い中身を掴んだまま動き続け、次に起動したものから新しい中身になる。
   # rename(2) は同じファイルシステムの中なら原子的であり、途中で失敗しても元のファイルが残る。
-  # そのため KxNotifyUtils の Windows 版にあった .old への退避と、その巻き戻しは要らない。
+  #
+  # 置き換える前に、今の実行ファイルを .old へハードリンクで残す。
+  # 置き換え自体はリネームで済むが、新しい版が起動できなかったときに戻す先が要る（自動更新の巻き戻し）。
+  # 複写ではなくハードリンクにするのは、同じ中身を二重に書かずに済み、途中で切れた複写が残らないためである。
   #
   # 実行ファイルのパスが変わらないため、SteamVR へ登録したマニフェストの
   # binary_path_linux は書き換えなくてよい。
@@ -58,6 +61,11 @@ module Update
       @executable_path : String,
       @staged_path : String,
     )
+    end
+
+    # 置き換える前の実行ファイルを残しておく場所。巻き戻しはここから戻す。
+    def backup_path : String
+      "#{@executable_path}.old"
     end
 
     # 取得したものに添える記録の置き場所。
@@ -167,8 +175,10 @@ module Update
     # そのまま置くと次の起動で実行できない。
     #
     # 置き換えに失敗しても元の実行ファイルは残る。取得したものも残し、やり直せるようにする。
+    # 元の実行ファイルを残せなかったときは置き換えない。戻す先の無い置き換えは、自動では行わない。
     def apply(record : Staged) : Bool
-      File.chmod(@staged_path, EXECUTABLE_PERMISSIONS)
+      make_executable
+      backup
       move(@staged_path, @executable_path)
 
       # ここから先は後始末である。置き換えは済んでおり、成否は変わらない。
@@ -177,6 +187,40 @@ module Update
 
       Log.info { "実行ファイルを #{record.tag} へ置き換えた" }
       true
+    end
+
+    # 取得したものに実行の権限を付ける。
+    # 置き換える前に試しに起動して確かめる（Preflight）ため、apply とは別に呼べるようにしてある。
+    def make_executable : Nil
+      File.chmod(@staged_path, EXECUTABLE_PERMISSIONS)
+    end
+
+    # 残しておいた実行ファイルへ戻す。戻す先が無ければ偽を返す。
+    #
+    # 戻すのもリネームで行う。途中で失敗しても、置き換えた後の実行ファイルはそのまま残る。
+    def rollback : Bool
+      unless File.exists?(backup_path)
+        Log.error { "戻す先の実行ファイルが無い: #{backup_path}" }
+        return false
+      end
+
+      move(backup_path, @executable_path)
+      Log.info { "実行ファイルを置き換える前のものへ戻した" }
+      true
+    end
+
+    # 今の実行ファイルを backup_path へ残す。
+    #
+    # 前回の残りは先に消す。ハードリンクは行き先が既にあると作れない。
+    # ハードリンクを作れないファイルシステムでは複写する。
+    private def backup : Nil
+      File.delete?(backup_path)
+      begin
+        File.link(@executable_path, backup_path)
+      rescue exception : File::Error
+        Log.debug { "ハードリンクを作れないため複写する: #{exception.message}" }
+        File.copy(@executable_path, backup_path)
+      end
     end
 
     # 実ファイルの入れ替え。

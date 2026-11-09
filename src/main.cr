@@ -19,6 +19,7 @@ require "./steamvr/openvr_repository"
 require "./steamvr/repository"
 require "./steamvr/settings_repository"
 require "./steamvr/usecase"
+require "./update/auto_updater"
 require "./update/installer"
 require "./update/repository"
 require "./update/usecase"
@@ -107,7 +108,7 @@ module KxFrameControllerManager
       @errors = Error::Usecase.new
       @errors.log_text = ->(key : String) { Runtime::I18n.log_text(key) }
 
-      @config = Config::Usecase.new(Config::FileRepository.new(Runtime::Paths.config_path))
+      @config = KxFrameControllerManager.config_usecase(Config::FileRepository.new(Runtime::Paths.config_path))
       @parts = Parts.new(@config.current)
       @scheduler = Runtime::Scheduler.new(@parts.steamvr, @errors)
       wire
@@ -124,6 +125,7 @@ module KxFrameControllerManager
 
       load_config
       trap_signals
+      mark_running
       check_update
 
       until @stop_requested
@@ -178,16 +180,30 @@ module KxFrameControllerManager
       end
     end
 
-    # 起動時に 1 回だけ新しい版を探し、見つけたらログに残す。置き換えは `update` コマンドで行う。
+    # 起動したことを残す。自動更新は、置き換えた版がここまで来たことで起動を確かめる。
+    private def mark_running : Nil
+      @errors.guard("error.update") do
+        Update::FileStateStore.write_marker(Runtime::Paths.running_marker_path, VERSION, Process.pid)
+      end
+    end
+
+    # 起動時に 1 回だけ新しい版を探し、見つけたらログに残す。
+    # 置き換えは自動更新のタイマーか `update` コマンドが行う。
     private def check_update : Nil
       update = @config.current.update
       return unless update.check_enabled
+      # 自動更新が有効でタイマーもあるなら、タイマーが確かめて置き換える。ここで重ねて API を叩かない。
+      # タイマーが無い（自動更新より前の版から `update` で上げた）環境では、従来どおりここで確かめて知らせる。
+      return if update.auto_update && Runtime::Systemd.update_timer_installed?
 
       spawn(name: "check_update") do
         usecase = Update::Usecase.new(Update::GitHubRepository.new("KxFrameControllerManager/#{VERSION}"))
         result = usecase.check(VERSION, update.channel)
         if release = result.release
           Log.info { "新しい版 #{release.tag} が出ている。`kx-frame-controller-manager update` で置き換えられる" }
+          if update.auto_update
+            Log.info { "自動更新のタイマーが無い。`kx-frame-controller-manager install` をやり直すと自動で置き換わる" }
+          end
         end
       end
     end
@@ -231,6 +247,9 @@ module KxFrameControllerManager
   # SteamVR へは常駐と別のアプリとしてつなぐ。Background で開くため、SteamVR が動いていなければ起こさない。
   class Tool
     @root : Config::Root
+    # 設定ファイルを読めて検証も通ったか。読めずに既定値へ倒したときは偽になる。
+    # 設定ファイルが無いときは真とする。無いなら既定値が利用者の設定である。
+    @config_loaded = true
 
     def initialize
       @root = read_config
@@ -340,7 +359,14 @@ module KxFrameControllerManager
     end
 
     def uninstall : Int32
-      if Runtime::Systemd.uninstall
+      state = Update::FileStateStore.new(Runtime::Paths.update_state_path, Runtime::Paths.running_marker_path, Runtime::Paths.update_lock_path)
+      # 排他は消し終わるまで持つ。その間に手で打った `update` が置き換えを始めないようにする。
+      removed = begin
+        Runtime::Systemd.uninstall(wait_for_update: -> { state.lock; nil })
+      ensure
+        state.unlock
+      end
+      if removed
         puts t("uninstall.done")
         0
       else
@@ -349,39 +375,37 @@ module KxFrameControllerManager
       end
     end
 
-    # GitHub Releases を見て新しい版があれば置き換え、ユニットを再起動する。
-    def update : Int32
-      repository = Update::GitHubRepository.new("KxFrameControllerManager/#{VERSION}")
-      channel = @root.update.channel
-      result = Update::Usecase.new(repository).check(VERSION, channel)
-      release = result.release
-      unless result.available? && release
-        puts t("update.#{result.outcome.to_s.underscore}", {"version" => VERSION})
-        return result.outcome.unreachable? ? 1 : 0
-      end
-
-      installer = Update::Installer.new(repository, VERSION, Runtime::Paths.executable_path, Runtime::Paths.staged_executable_path)
-      puts t("update.downloading", {"tag" => release.tag})
-      record = installer.download(release) ? installer.staged(channel) : nil
-      unless record && installer.apply(record)
-        STDERR.puts t("update.failed")
-        return 1
-      end
-      puts t("update.applied", {"tag" => release.tag})
-
-      systemctl = Runtime::Systemd::Systemctl.new
-      if systemctl.active?
-        unless systemctl.run(["restart", Runtime::Systemd::UNIT_NAME])
-          STDERR.puts t("update.restart_failed")
+    # GitHub Releases を見て新しい版があれば置き換え、ユニットを再起動して起動を確かめる。
+    # 起動しなければ元の版へ戻す。
+    #
+    # auto が真なのは自動更新のタイマーから呼ばれたときである。設定の有効と間隔に従い、
+    # 前に戻した版は入れない。ログは journald で読めるよう、設定のログレベルで標準エラーへ出す。
+    def update(auto : Bool = false) : Int32
+      if auto
+        # 読めなかった設定の代わりの既定値では auto_update が真になる。
+        # 利用者が切っていても置き換えてしまうため、設定を読めないうちは自動では何もしない。
+        unless @config_loaded
+          STDERR.puts t("update.config_unreadable")
           return 1
         end
-        puts t("update.restarted")
+        Runtime::Logging.setup([Runtime::StderrBackend.new] of ::Log::Backend, @root.log_level)
       end
-      0
-    rescue exception : IO::Error | File::Error
-      STDERR.puts t("update.failed")
-      STDERR.puts "  #{exception.message}"
-      1
+
+      repository = Update::GitHubRepository.new("KxFrameControllerManager/#{VERSION}")
+      installer = Update::Installer.new(repository, VERSION, Runtime::Paths.executable_path, Runtime::Paths.staged_executable_path)
+      state = Update::FileStateStore.new(Runtime::Paths.update_state_path, Runtime::Paths.running_marker_path, Runtime::Paths.update_lock_path)
+      updater = Update::AutoUpdater.new(repository, installer, state, Runtime::Systemd::UpdateService.new, Update::ProcessPreflight.new, VERSION)
+
+      result = updater.run(@root.update, manual: !auto)
+      vars = {"version" => VERSION, "tag" => result.tag || "", "path" => Runtime::Paths.executable_path}
+      message = t("update.#{result.outcome.to_s.underscore}", vars)
+      if result.outcome.failure? || result.outcome.rejected?
+        STDERR.puts message
+      elsif !(auto && (result.outcome.disabled? || result.outcome.not_due?))
+        # タイマーは 30 分ごとに起きる。何もしなかった回まで journald に残すと読みにくい。
+        puts message
+      end
+      result.outcome.failure? ? 1 : 0
     end
 
     # 部品を組み立てて SteamVR へ 1 回だけつなぎ、終わったら閉じる。
@@ -415,16 +439,26 @@ module KxFrameControllerManager
       repository = Config::FileRepository.new(Runtime::Paths.config_path)
       return Config::Root.default unless repository.exists?
       root = repository.load
-      errors = Config::Usecase.new(repository).validate(root)
+      errors = KxFrameControllerManager.config_usecase(repository).validate(root)
       return root if errors.empty?
       STDERR.puts Runtime::I18n.t("cli.config_invalid")
       errors.each { |error| STDERR.puts "  #{error}" }
+      @config_loaded = false
       Config::Root.default
     rescue exception : JSON::Error | File::Error
       STDERR.puts Runtime::I18n.t("cli.config_invalid")
       STDERR.puts "  #{exception.message}"
+      @config_loaded = false
       Config::Root.default
     end
+  end
+
+  # 設定の usecase に、各コンテキストの検証を登録して返す。
+  # 常駐と CLI で同じ検証を通すため、組み立てはここだけで行う。
+  def self.config_usecase(repository : Config::Repository) : Config::Usecase
+    usecase = Config::Usecase.new(repository)
+    usecase.register_validator("update") { |root| Update.validate(root.update) }
+    usecase
   end
 
   # コマンドを解釈して実行し、終了コードを返す（仕様書 3.7 節）。
@@ -447,7 +481,7 @@ module KxFrameControllerManager
     in .disconnect? then Tool.new.disconnect(parsed.argument.not_nil!)
     in .install?    then Tool.new.install
     in .uninstall?  then Tool.new.uninstall
-    in .update?     then Tool.new.update
+    in .update?     then Tool.new.update(auto: parsed.argument == Runtime::CLI::AUTO)
     in .version?
       puts VERSION
       0
