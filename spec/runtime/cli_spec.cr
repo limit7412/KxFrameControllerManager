@@ -28,6 +28,27 @@ describe Runtime::CLI do
     Runtime::CLI.parse(["update", "--auto", "x"]).error.should eq "cli.unexpected_argument"
   end
 
+  it "channel は引数なしで今のチャンネルを見せ、stable か test で切り替える" do
+    show = Runtime::CLI.parse(["channel"])
+    show.command.should eq Runtime::CLI::Command::Channel
+    show.argument.should be_nil
+    show.error.should be_nil
+
+    %w[stable test].each do |name|
+      parsed = Runtime::CLI.parse(["channel", name])
+      parsed.argument.should eq name
+      parsed.error.should be_nil
+    end
+
+    Runtime::CLI.parse(["channel", "beta"]).error.should eq "cli.channel_invalid"
+    Runtime::CLI.parse(["channel", "test", "stable"]).error.should eq "cli.channel_invalid"
+  end
+
+  it "channel が受け付ける綴りは、設定 update.channel の値と同じ" do
+    Runtime::CLI::CHANNELS.should eq Update::CHANNELS
+    Runtime::CLI::CHANNELS.should eq Config::Usecase::UPDATE_CHANNELS
+  end
+
   it "引数を取らないコマンドへの引数と、不明なコマンドを誤りにする" do
     Runtime::CLI.parse(["status", "x"]).error.should eq "cli.unexpected_argument"
     unknown = Runtime::CLI.parse(["foo"])

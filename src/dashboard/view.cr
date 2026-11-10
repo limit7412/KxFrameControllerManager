@@ -371,8 +371,15 @@ module Dashboard
 
       last_checked = [update.last_checked_at, state.checked_at].compact.max?
       checked = last_checked.try { |time| format_time(time) } || t("dashboard.update.never")
+      # チャンネルは画面から切り替えない（開発者向けの test を誤って選ばせないため）。
+      # ただし test で動いていることは、プレリリースが入りうると分かるよう版の横に出す。
+      version = if root.update.channel == "test"
+                  {t("dashboard.update.version"), t("dashboard.update.version_test", {"version" => update.version}), WARN}
+                else
+                  {t("dashboard.update.version"), update.version, TEXT}
+                end
       info = [
-        {t("dashboard.update.version"), update.version, TEXT},
+        version,
         {t("dashboard.update.last_checked"), checked, TEXT},
       ]
       phase = update.phase

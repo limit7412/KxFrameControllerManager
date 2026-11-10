@@ -17,6 +17,8 @@
 #
 #   ... | bash -s -- --prerelease        プレリリースも含めて最も新しい版を入れる
 #   ... | bash -s -- --version 0.1.0     版を指定して入れる
+#   ... | bash -s -- --channel test      開発者向け。プレリリースも含めて最も新しい版を入れ、
+#                                        以後の自動更新と update でもプレリリースを取る
 #
 # 途中までしか届かなかったスクリプトが半端に動かないよう、処理は関数に閉じ込め、
 # 最後の行で呼ぶ。最後の行が届かなければ何も起きない。
@@ -32,13 +34,17 @@ fail() { printf 'エラー: %s\n' "$*" >&2; exit 1; }
 
 usage() {
   cat <<'EOF'
-使い方: get.sh [--prerelease] [--version <版>]
+使い方: get.sh [--prerelease] [--version <版>] [--channel <stable|test>]
 
-  --prerelease      プレリリースも含めて最も新しい版を入れる
-  --version <版>    指定した版（タグ名）を入れる
-  -h, --help        この説明を出す
+  --prerelease          プレリリースも含めて最も新しい版を入れる（入れるのは今回だけ）
+  --version <版>        指定した版（タグ名）を入れる
+  --channel <stable|test>
+                        更新で追うチャンネル（設定 update.channel）を切り替える。
+                        test は開発者向けで、--version が無ければプレリリースも含めて最も新しい版を入れ、
+                        以後の自動更新と update でもプレリリースを取る
+  -h, --help            この説明を出す
 
-何も付けなければ、最も新しい正式リリースを入れる。
+何も付けなければ、最も新しい正式リリースを入れる。チャンネルは今の設定のまま変えない。
 EOF
 }
 
@@ -69,13 +75,21 @@ latest_any_tag() {
 }
 
 main() {
-  local version="" prerelease=0
+  local version="" prerelease=0 channel=""
   while [ $# -gt 0 ]; do
     case "$1" in
       --prerelease) prerelease=1 ;;
       --version)
         [ $# -ge 2 ] || fail "--version には版を続けてほしい"
         version="$2"
+        shift
+        ;;
+      --channel)
+        [ $# -ge 2 ] || fail "--channel には stable か test を続けてほしい"
+        case "$2" in
+          stable | test) channel="$2" ;;
+          *) fail "--channel には stable か test を指定してほしい: $2" ;;
+        esac
         shift
         ;;
       -h | --help) usage; return 0 ;;
@@ -96,7 +110,9 @@ main() {
   done
 
   if [ -z "$version" ]; then
-    if [ "$prerelease" -eq 1 ]; then
+    # test を追うと決めたなら、入れる版もその基準で選ぶ。正式リリースを入れた直後に
+    # プレリリースへ置き換わる二度手間を避ける。
+    if [ "$prerelease" -eq 1 ] || [ "$channel" = "test" ]; then
       version="$(latest_any_tag)"
     else
       version="$(latest_stable_tag)"
@@ -134,6 +150,14 @@ main() {
   # 失敗したときは install.sh と systemctl が理由を先に出している。ここでは次の手だけを添える。
   bash "$folder/install.sh" ||
     fail "install.sh が失敗した。systemctl --user が使えない端末では、ヘッドセットのデスクトップの Konsole か ssh で入り直して実行してほしい"
+
+  if [ -n "$channel" ]; then
+    say "更新チャンネルを $channel にする"
+    # channel コマンドは後から足したものであり、--version で古い版を入れると無い。
+    # 版は入っているので失敗にはせず、手で切り替える方法を添える。
+    "$HOME/.local/bin/kx-frame-controller-manager" channel "$channel" ||
+      printf '警告: チャンネルを切り替えられなかった。この版に channel コマンドが無い場合は、設定ファイル（~/.config/KxFrameControllerManager/config.json）の update.channel を "%s" に書き換えてほしい\n' "$channel" >&2
+  fi
 
   say "入れ終わった。疎通は次で確かめられる"
   printf '    ~/.local/bin/kx-frame-controller-manager status\n'
