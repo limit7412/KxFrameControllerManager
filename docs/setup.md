@@ -168,7 +168,7 @@ journalctl --user -u kx-frame-controller-manager      # ログ
 
 ```sh
 ~/.local/bin/kx-frame-controller-manager start           # 常駐を起動する（systemctl --user start と同じ）
-~/.local/bin/kx-frame-controller-manager stop            # 常駐を止める（自動起動は変えない）
+~/.local/bin/kx-frame-controller-manager stop            # 常駐を止める（自動起動は変えない。走っている更新があれば終わるのを待つ）
 ~/.local/bin/kx-frame-controller-manager autostart       # 自動起動の状態を表示する
 ~/.local/bin/kx-frame-controller-manager autostart off   # 自動起動を無効にする（on で有効）
 ```

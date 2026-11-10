@@ -660,9 +660,20 @@ module KxFrameControllerManager
     end
 
     # 常駐のユニットを止める。自動起動の設定は変えない。
+    #
+    # 走っている更新が終わるのを、更新の排他を取って待ってから止める（uninstall と同じ）。
+    # 置き換えた版の起動を確かめている最中に止めると、更新は起動しなかったものと取り違えて元の版へ戻し、
+    # 常駐を起動し直してしまう。排他は止め終わるまで持ち、その間に更新が始まらないようにする。
     def stop : Int32
       return not_installed unless Runtime::Systemd.installed?
-      if Runtime::Systemd.stop
+      state = Update::FileStateStore.new(Runtime::Paths.update_state_path, Runtime::Paths.running_marker_path, Runtime::Paths.update_lock_path)
+      stopped = begin
+        state.lock
+        Runtime::Systemd.stop
+      ensure
+        state.unlock
+      end
+      if stopped
         puts t("service.stopped")
         0
       else
