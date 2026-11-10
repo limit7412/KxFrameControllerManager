@@ -37,6 +37,27 @@ describe Runtime::DesktopEntry do
     end
   end
 
+  it "同時に書いても、どちらも失敗せず、書き終えた中身が残る" do
+    directory = File.tempname("kxfcm-desktop")
+    path = File.join(directory, Runtime::DesktopEntry::FILE_NAME)
+    begin
+      done = Channel(Exception?).new
+      20.times do |index|
+        spawn do
+          Runtime::DesktopEntry.write("/#{index % 2}", path)
+          done.send(nil)
+        rescue exception
+          done.send(exception)
+        end
+      end
+      20.times { done.receive.should be_nil }
+      ["/0", "/1"].map { |exe| Runtime::DesktopEntry.content(exe) }.should contain File.read(path)
+      Dir.children(directory).should eq [Runtime::DesktopEntry::FILE_NAME]
+    ensure
+      FileUtils.rm_rf(directory)
+    end
+  end
+
   it "中身が変わったときだけ書き、消せば無くなる" do
     directory = File.tempname("kxfcm-desktop")
     path = File.join(directory, "applications", Runtime::DesktopEntry::FILE_NAME)
@@ -46,7 +67,8 @@ describe Runtime::DesktopEntry do
       Runtime::DesktopEntry.write("/a", path).should be_false
       Runtime::DesktopEntry.write("/b", path).should be_true
       File.read(path).should contain "TryExec=/b\n"
-      File.exists?("#{path}.new").should be_false
+      # 隣に書いたファイルは残さない。
+      Dir.children(File.dirname(path)).should eq [Runtime::DesktopEntry::FILE_NAME]
 
       Runtime::DesktopEntry.delete(path)
       File.exists?(path).should be_false

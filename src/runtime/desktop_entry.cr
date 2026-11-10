@@ -1,4 +1,5 @@
 require "log"
+require "random/secure"
 require "./i18n"
 require "./paths"
 
@@ -58,14 +59,21 @@ module Runtime
     # 書き出す。中身が同じなら書かない。変えたら true を返す。
     #
     # 隣へ書いてからリネームで置き換える。Steam が一覧を作る最中に、書きかけのファイルを読ませないためである。
+    # 隣のファイルの名前は書き込みごとに変える。`install` と、それが起動した常駐は同時に書きうる。
+    # 名前が同じだと、先にリネームした側が相手の書きかけを公開し、後の側のリネームは失敗する。
+    # 名前の末尾は .desktop にしないので、Steam は隣のファイルを一覧に入れない。
     def self.write(executable : String, path : String = Paths.desktop_entry_path) : Bool
       expected = content(executable)
       return false if File.exists?(path) && File.read(path) == expected
 
       Dir.mkdir_p(File.dirname(path))
-      temporary = "#{path}.new"
-      File.write(temporary, expected)
-      File.rename(temporary, path)
+      temporary = "#{path}.#{Process.pid}.#{Random::Secure.hex(4)}.new"
+      begin
+        File.write(temporary, expected)
+        File.rename(temporary, path)
+      ensure
+        File.delete?(temporary)
+      end
       Log.info { ".desktop を書き出した: #{path}" }
       true
     end
