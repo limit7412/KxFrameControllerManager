@@ -124,7 +124,7 @@
   "dashboard.button.thumbstick": "摇杆按下",
   "dashboard.binding_note": "若在 SteamVR 绑定界面中选择了绑定，则以其为准。“最高”需要开启 Experimental overlay input overrides",
   "dashboard.rebind_pending": "按钮更改将在关闭仪表板后生效",
-  "dashboard.power_save_note": "省电功能尚未在实机上验证，默认关闭",
+  "dashboard.power_save_note": "省电功能默认关闭",
   "dashboard.config_errors": "配置文件有误，正在使用之前的设置运行:",
   "dashboard.save_failed": "无法写入配置文件",
   "error.update": "自动更新处理失败",

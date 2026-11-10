@@ -124,7 +124,7 @@
   "dashboard.button.thumbstick": "Clic du stick",
   "dashboard.binding_note": "L'association choisie dans SteamVR est prioritaire. « Maximale » nécessite Experimental overlay input overrides",
   "dashboard.rebind_pending": "Les changements de bouton s'appliquent à la fermeture du tableau de bord",
-  "dashboard.power_save_note": "L'économie d'énergie est désactivée par défaut tant qu'elle n'a pas été testée sur un vrai casque",
+  "dashboard.power_save_note": "L'économie d'énergie est désactivée par défaut",
   "dashboard.config_errors": "Le fichier de configuration contient des erreurs ; réglages précédents utilisés :",
   "dashboard.save_failed": "Impossible d'écrire le fichier de configuration",
   "error.update": "Échec de la mise à jour automatique",

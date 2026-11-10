@@ -44,15 +44,15 @@ module Config
 
   # power_save セクション。両方のコントローラーが切れている間の省電力（仕様書 3.8 節）。
   #
-  # 既定は無効とする。7.2 節の実機確認が通るまでは、明るさと画質を勝手に変えない。
+  # 既定は無効とする。明るさと画質を変えるため、使う人が有効にしたときだけ動かす。
   class PowerSaveSection
     include JSON::Serializable
 
     property enabled : Bool = false
     # 両方が切れてから省電力へ入るまでの秒数。
     property delay_s : Int32 = 10
-    # 明るさを下げるか。
-    property brightness : Bool = true
+    # 明るさを下げるか。省電力を有効にしても、明るさは使う人が選んだときだけ下げる。
+    property brightness : Bool = false
     # 省電力中の analogGain。nil なら HMD の最小値を使う。
     # null でも書き出す。省くと、設定ファイルを開いた利用者がこの項目を見つけられない。
     @[JSON::Field(emit_null: true)]

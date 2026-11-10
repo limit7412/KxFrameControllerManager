@@ -124,7 +124,7 @@
   "dashboard.button.thumbstick": "Clic del stick",
   "dashboard.binding_note": "La asignación elegida en SteamVR tiene prioridad. «Máxima» requiere Experimental overlay input overrides",
   "dashboard.rebind_pending": "Los cambios de botón se aplican al cerrar el panel",
-  "dashboard.power_save_note": "El ahorro de energía está desactivado por defecto hasta probarse en un dispositivo real",
+  "dashboard.power_save_note": "El ahorro de energía está desactivado por defecto",
   "dashboard.config_errors": "El archivo de configuración tiene errores; se usan los ajustes anteriores:",
   "dashboard.save_failed": "No se pudo escribir el archivo de configuración",
   "error.update": "Error en la actualización automática",

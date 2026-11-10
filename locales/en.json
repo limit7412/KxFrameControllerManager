@@ -124,7 +124,7 @@
   "dashboard.button.thumbstick": "Stick click",
   "dashboard.binding_note": "A binding chosen in the SteamVR binding screen takes precedence. Highest priority needs Experimental overlay input overrides",
   "dashboard.rebind_pending": "Button changes apply when you close the dashboard",
-  "dashboard.power_save_note": "Power saving is OFF by default until tested on a real device",
+  "dashboard.power_save_note": "Power saving is OFF by default",
   "dashboard.config_errors": "The config file has errors; running with the previous settings:",
   "dashboard.save_failed": "Could not write the config file",
   "error.update": "Failed in automatic update",

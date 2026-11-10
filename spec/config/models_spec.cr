@@ -13,6 +13,7 @@ describe Config::Root do
     root.power_off.cooldown_ms.should eq 3000
     root.power_off.confirm_timeout_ms.should eq 3000
     root.power_save.enabled.should be_false
+    root.power_save.brightness.should be_false
     root.power_save.delay_s.should eq 10
     root.power_save.brightness_gain.should be_nil
     root.input.priority.should eq Config::InputPriority::Normal

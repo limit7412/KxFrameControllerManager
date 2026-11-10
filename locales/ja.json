@@ -124,7 +124,7 @@
   "dashboard.button.thumbstick": "スティック押込",
   "dashboard.binding_note": "SteamVR のバインド画面で選んだバインドがあれば、そちらが優先されます。最優先は Experimental overlay input overrides が必要です",
   "dashboard.rebind_pending": "ボタンの変更は、ダッシュボードを閉じると反映します",
-  "dashboard.power_save_note": "省電力は実機での確認がまだのため、既定では OFF です",
+  "dashboard.power_save_note": "省電力は既定では OFF です",
   "dashboard.config_errors": "設定ファイルに誤りがあり、直前の設定で動いています:",
   "dashboard.save_failed": "設定ファイルへ書けませんでした",
   "error.update": "自動更新の処理に失敗した",

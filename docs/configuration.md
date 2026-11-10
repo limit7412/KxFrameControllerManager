@@ -26,7 +26,7 @@ CLI は設定ファイルを書き出さず、無いときや不正なときは�
   "power_save": {
     "enabled": false,
     "delay_s": 10,
-    "brightness": true,
+    "brightness": false,
     "brightness_gain": null,
     "performance_profile": true
   },
@@ -85,13 +85,14 @@ CLI は設定ファイルを書き出さず、無いときや不正なときは�
 ## power_save
 
 両方のコントローラーが切れている間の省電力（仕様書 3.8 節）。
-実機での確認が済むまでは既定で無効にしてある。
+既定では無効にしてある。明るさと画質を変えるため、使う人が有効にする。
+有効にしても、明るさを下げる `brightness` は既定で無効であり、別に有効にする。
 
 | キー | 既定 | 範囲 | 意味 |
 | --- | --- | --- | --- |
 | `enabled` | `false` | | 省電力を使うか |
 | `delay_s` | `10` | 0 から 600 | 両方が切れてから省電力へ入るまでの秒数 |
-| `brightness` | `true` | | 明るさ（`steamvr/analogGain`）を下げるか |
+| `brightness` | `false` | | 明るさ（`steamvr/analogGain`）を下げるか |
 | `brightness_gain` | `null` | null か正の数 | 省電力中の明るさ。null なら HMD の最小値を使う。数値は HMD の範囲へ収めて使う |
 | `performance_profile` | `true` | | 描画のプロファイル（`steamvr/performanceProfile`）を省電力のものへ切り替えるか |
 
