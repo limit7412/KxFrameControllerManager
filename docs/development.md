@@ -117,6 +117,7 @@ crystal run scripts/preview_dashboard.cr -- tmp/dashboard-preview
 ## 実機でしか確かめられないこと
 
 次の項目は、Steam Frame の実機でないと確認できない。
+これまでに確かめた結果は[開発状況](status.md)にまとめてある。
 仕様書 7.2 節の順に確かめる。基盤として確かめるのは次のものである。
 
 - `/opt/steamvr/bin/linuxarm64/libopenvr_api.so` を開けること

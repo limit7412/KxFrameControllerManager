@@ -3,6 +3,11 @@
 ヘッドセット（Steam Frame）へ入れて、長押しでコントローラーを切断できるようにするまでの手順である。
 sudo は使わず、ホームの外へは何も書かない。
 
+## 動作要件
+
+- Steam Frame（SteamOS、aarch64）。Developer Mode を有効にし、ssh で入れること。デスクトップモードの Konsole でもよい
+- SteamVR（動いていない間は何もせずに待つ）
+
 ## 1. ヘッドセットの端末を開く
 
 以降のコマンドは、どれもヘッドセットの上で実行する。
@@ -124,6 +129,19 @@ SteamVR そのものは再起動しない。
 
 画面は libcairo で描く。SteamOS には入っているが、見つからなければタブを出さずに常駐を続ける。
 タブが要らなければ設定 `dashboard.enabled` を `false` にする。
+
+## 置き場所
+
+どれもホームの下に置き、`~` の外には書かない。
+
+| ファイル | 場所 |
+| --- | --- |
+| 実行ファイル | `~/.local/bin/kx-frame-controller-manager` |
+| 設定 | `~/.config/KxFrameControllerManager/config.json` |
+| vrmanifest とアクションマニフェスト | `~/.local/share/KxFrameControllerManager/` |
+| ログ | `~/.local/state/KxFrameControllerManager/logs/` |
+| 省電力で変える前の値 | `~/.local/state/KxFrameControllerManager/power_save.json` |
+| systemd のユニット | `~/.config/systemd/user/kx-frame-controller-manager.service` |
 
 ## 常駐の管理
 
