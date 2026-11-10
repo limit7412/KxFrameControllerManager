@@ -11,7 +11,7 @@ All features planned for v1 are in place.
 
 - Reads the long press as a SteamVR Input action and sends a disconnect request to the SteamVR web server inside the headset (`127.0.0.1:27062`). The default bindings are a long press of View on the left controller and Menu on the right
 - `status`, `list`, and `disconnect` check connectivity and controller matching, and can disconnect a controller without a long press
-- A settings tab named "KxFCM" appears in the SteamVR dashboard. From it you can check status, disconnect manually, and configure button bindings, hold times, and power saving
+- A settings tab named "KxFCM" appears in the SteamVR dashboard. From it you can check status, disconnect manually, and configure button bindings, hold times, and power saving. The "Disconnect" status shows whether `127.0.0.1:27062` above is reachable
 - Runs as a systemd user unit. Installation is a single `curl ... | bash` line
 - While both controllers are disconnected, power saving can lower brightness and image quality. Power saving and its brightness option are both disabled by default; enable them from the settings tab or the config file
 
