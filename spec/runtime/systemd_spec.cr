@@ -88,4 +88,41 @@ describe Runtime::Systemd do
       FileUtils.rm_rf(directory)
     end
   end
+
+  it "自動起動の状態は、enable が default.target.wants に置くリンクで見る" do
+    directory = File.tempname("kxfcm-systemd")
+    begin
+      Dir.mkdir_p(File.join(directory, "default.target.wants"))
+      path = File.join(directory, Runtime::Systemd::UNIT_NAME)
+      File.write(path, "x")
+      Runtime::Systemd.installed?(path).should be_true
+      Runtime::Systemd.autostart_enabled?(path).should be_false
+      File.symlink(path, File.join(directory, "default.target.wants", Runtime::Systemd::UNIT_NAME))
+      Runtime::Systemd.autostart_enabled?(path).should be_true
+      Runtime::Systemd.installed?(File.join(directory, "missing.service")).should be_false
+    ensure
+      FileUtils.rm_rf(directory)
+    end
+  end
+
+  it "自動起動の切り替えは enable と disable だけを呼び、常駐の起動と停止はしない" do
+    systemctl = FakeSystemctl.new
+    Runtime::Systemd.set_autostart(false, systemctl).should be_true
+    Runtime::Systemd.set_autostart(true, systemctl).should be_true
+    systemctl.calls.should eq [
+      ["disable", "--quiet", Runtime::Systemd::UNIT_NAME],
+      ["enable", "--quiet", Runtime::Systemd::UNIT_NAME],
+    ]
+  end
+
+  it "start は起動の回数の制限を解いてから起動し、stop は止めるだけにする" do
+    systemctl = FakeSystemctl.new
+    Runtime::Systemd.start(systemctl).should be_true
+    Runtime::Systemd.stop(systemctl).should be_true
+    systemctl.calls.should eq [
+      ["reset-failed", Runtime::Systemd::UNIT_NAME],
+      ["start", Runtime::Systemd::UNIT_NAME],
+      ["stop", Runtime::Systemd::UNIT_NAME],
+    ]
+  end
 end

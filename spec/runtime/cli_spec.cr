@@ -44,6 +44,24 @@ describe Runtime::CLI do
     Runtime::CLI.parse(["channel", "test", "stable"]).error.should eq "cli.channel_invalid"
   end
 
+  it "start と stop は引数を取らず、autostart は on か off で切り替える" do
+    Runtime::CLI.parse(["start"]).command.should eq Runtime::CLI::Command::Start
+    Runtime::CLI.parse(["stop"]).command.should eq Runtime::CLI::Command::Stop
+    Runtime::CLI.parse(["start", "x"]).error.should eq "cli.unexpected_argument"
+
+    show = Runtime::CLI.parse(["autostart"])
+    show.command.should eq Runtime::CLI::Command::Autostart
+    show.argument.should be_nil
+    show.error.should be_nil
+    %w[on off].each do |name|
+      parsed = Runtime::CLI.parse(["autostart", name])
+      parsed.argument.should eq name
+      parsed.error.should be_nil
+    end
+    Runtime::CLI.parse(["autostart", "yes"]).error.should eq "cli.autostart_invalid"
+    Runtime::CLI.parse(["autostart", "on", "off"]).error.should eq "cli.autostart_invalid"
+  end
+
   it "channel が受け付ける綴りは、設定 update.channel の値と同じ" do
     Runtime::CLI::CHANNELS.should eq Update::CHANNELS
     Runtime::CLI::CHANNELS.should eq Config::Usecase::UPDATE_CHANNELS

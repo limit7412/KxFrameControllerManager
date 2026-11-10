@@ -37,6 +37,7 @@ snapshot = Dashboard::Snapshot.new(
   gain_range: {0.5, 1.6},
   config_errors: [] of String,
   update: update,
+  autostart: true,
 )
 
 translate = ->(key : String, vars : Hash(String, String)) { Runtime::I18n.t(key, vars) }

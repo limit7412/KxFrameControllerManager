@@ -38,7 +38,9 @@ module Dashboard
     gain_range : {Float64, Float64}?,
     # 最後に読んだ設定ファイルの誤り。表示する言語の文にしてある。
     config_errors : Array(String),
-    update : UpdateStatus do
+    update : UpdateStatus,
+    # 自動起動（systemd のユニットの enable）が有効か。ユニットが入っていなければ nil で、画面から切り替えられない。
+    autostart : Bool? = nil do
     def hand(hand : PowerOff::Hand) : HandStatus
       hand.left? ? left : right
     end

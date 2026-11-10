@@ -78,7 +78,7 @@ The screen has the following tabs. Values change one step at a time with the lef
 | Long press | Whether a long press disconnects, the button for each hand, time to disconnect, time to the warning vibration, pause after a disconnect, which side to disconnect (the pressed side or both), input priority |
 | Vibration & power | Whether to vibrate before disconnecting and how strongly, power saving settings |
 | Update | Automatic updates and the check interval. The current version and the time of the last check are also shown |
-| General | Display language. The default, "Auto", follows the Steam display language |
+| General | Display language (the default, "Auto", follows the Steam display language), and whether to start automatically with Frame. You can also quit the tool here |
 
 A change of the long press button takes effect after you close the dashboard.
 If you assign a button to KxFrameControllerManager in the SteamVR controller binding screen, that binding takes precedence.
@@ -106,6 +106,22 @@ You can also update from a terminal with the following command. Running the inst
 ```
 
 To stop automatic updates, turn off "Update automatically" in the "Update" tab.
+
+## Quitting and autostart
+
+To stop the tool, press "Quit KxFCM" twice in the "General" tab of the settings screen.
+The tab disappears when the tool quits.
+The tool starts again the next time Frame starts.
+To bring it back right away, run the following command in a terminal.
+
+```sh
+~/.local/bin/kx-frame-controller-manager start
+```
+
+If you do not want the tool to start with Frame, turn off "Start automatically with Frame" in the same tab.
+Turning it off does not stop the running tool.
+From then on, the tool runs only when you run `start` above.
+From a terminal, `autostart on` and `autostart off` switch it, and `autostart` alone shows the current state.
 
 ## Uninstalling
 
@@ -139,7 +155,7 @@ Start by running `status` to see where things stop.
 - **`27062: not reachable`** (shown as "Disconnect: unavailable" on the settings screen): the mechanism inside SteamVR that disconnects controllers is not responding. Restart SteamVR and try again. A SteamVR update may also have broken it
 - **The serials do not match**: for safety, that hand is never disconnected by a long press. Reconnect the controller and run `status` again
 - **The long press does nothing only while in a game**: the game may be taking the input. Set "Input priority" to "Highest" in the "Long press" tab and enable "Experimental overlay input overrides" in SteamVR. The assigned button then no longer works inside the game
-- **The "KxFCM" tab does not appear**: check that the tool is running with `systemctl --user status kx-frame-controller-manager`. If it is not, start it again with `systemctl --user restart kx-frame-controller-manager`
+- **The "KxFCM" tab does not appear**: check that the tool is running with `systemctl --user status kx-frame-controller-manager`. If it is not, start it with `~/.local/bin/kx-frame-controller-manager start`
 
 Logs are available with `journalctl --user -u kx-frame-controller-manager`.
 They are also kept per day in `~/.local/state/KxFrameControllerManager/logs/`.

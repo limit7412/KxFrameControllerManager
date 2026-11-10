@@ -78,7 +78,7 @@ sudo は要らず、ホームの外には何も書かない。
 | 長押し | 長押しで切るかどうか、左右それぞれに使うボタン、切断までの時間、予告の振動までの時間、切断の後に長押しを受け付けない時間、切る範囲（押した側か左右の両方か）、入力の優先度 |
 | 振動と省電力 | 予告と切断の前の振動の有無と強さ、省電力の設定 |
 | 更新 | 自動更新の有無と確認の間隔。今の版と最後に確認した時刻も見られる |
-| 全般 | 表示言語。既定の「自動」は Steam の表示言語に従う |
+| 全般 | 表示言語（既定の「自動」は Steam の表示言語に従う）、Frame の起動時に自動で起動するか。本ツールの終了もここから行う |
 
 長押しに使うボタンを変えたときは、ダッシュボードを閉じた後で反映される。
 SteamVR のコントローラーバインド画面で KxFrameControllerManager を選んでボタンを割り当てた場合は、そちらが優先される。
@@ -106,6 +106,22 @@ SteamVR のコントローラーバインド画面で KxFrameControllerManager �
 ```
 
 自動更新を止めるときは、「更新」のタブで「自動で更新する」を OFF にする。
+
+## 終了と自動起動
+
+本ツールを止めるときは、設定画面の「全般」のタブで「KxFCM を終了」を 2 回押す。
+終了するとタブも消える。
+次に Frame を起動したときに、本ツールも起動し直す。
+すぐに戻すときは、端末から次のコマンドを実行する。
+
+```sh
+~/.local/bin/kx-frame-controller-manager start
+```
+
+Frame の起動時に本ツールを起動させたくないときは、同じタブで「Frame の起動時に自動で起動」を OFF にする。
+OFF にしても、動いている本ツールはそのまま動き続ける。
+以後は上の `start` を実行したときだけ動く。
+端末からは `autostart on` と `autostart off` で切り替えられ、`autostart` だけなら今の状態を表示する。
 
 ## アンインストール
 
@@ -139,7 +155,7 @@ SteamVR を動かした状態で本ツールを一度起動すると戻る。
 - **`27062: 届きません`（設定画面では「切断機能: 使えません」）と出る**：SteamVR の中のコントローラーを切る仕組みが応えていない。SteamVR を起動し直して、もう一度試す。SteamVR の更新で使えなくなった可能性もある
 - **シリアルが一致しない**：その手は安全のため長押ししても切らない。コントローラーをつなぎ直してから、もう一度 `status` を見る
 - **ゲーム中だけ長押しが効かない**：ゲームが入力を取っている可能性がある。「長押し」のタブで「入力の優先度」を「最優先」にし、SteamVR の「Experimental overlay input overrides」を有効にする。この場合、割り当てたボタンはゲームの中では効かなくなる
-- **「KxFCM」のタブが出ない**：本ツールが動いているかを `systemctl --user status kx-frame-controller-manager` で確かめる。動いていなければ `systemctl --user restart kx-frame-controller-manager` で起動し直す
+- **「KxFCM」のタブが出ない**：本ツールが動いているかを `systemctl --user status kx-frame-controller-manager` で確かめる。動いていなければ `~/.local/bin/kx-frame-controller-manager start` で起動する
 
 ログは `journalctl --user -u kx-frame-controller-manager` で見られる。
 `~/.local/state/KxFrameControllerManager/logs/` にも日ごとに残る。

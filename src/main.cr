@@ -272,6 +272,14 @@ module KxFrameControllerManager
         {result.outcome.to_s.underscore, result.release.try(&.tag)}
       end
       dashboard.start_update = -> { Runtime::Systemd.start_manual_update(Runtime::Paths.executable_path) }
+      dashboard.set_autostart = ->(enabled : Bool) do
+        changed = Runtime::Systemd.set_autostart(enabled)
+        Log.info { "設定画面から自動起動を#{enabled ? "有効" : "無効"}にした" } if changed
+        changed
+      end
+      # 終了コード 0 で終える。ユニットは Restart=on-failure なので、systemd は起動し直さない。
+      # systemctl stop を呼ばないのは、ユニットを経ずに `run` を起動した場合にも同じように終えるためである。
+      dashboard.quit = -> { @stop_requested = true; nil }
       dashboard.canvas_factory = ->(width : Int32, height : Int32) { Dashboard::CairoCanvas.create(width, height).as(Dashboard::Canvas?) }
       dashboard
     end
@@ -296,6 +304,7 @@ module KxFrameControllerManager
         gain_range: connected ? parts.settings.gain_range : nil,
         config_errors: @config_errors.map { |error| KxFrameControllerManager.describe(error) },
         update: update_status,
+        autostart: Runtime::Systemd.installed? ? Runtime::Systemd.autostart_enabled? : nil,
       )
     end
 
@@ -638,6 +647,60 @@ module KxFrameControllerManager
       1
     end
 
+    # 常駐のユニットを起動する。設定画面から終えた常駐を戻すのに使う。
+    def start : Int32
+      return not_installed unless Runtime::Systemd.installed?
+      if Runtime::Systemd.start
+        puts t("service.started")
+        0
+      else
+        STDERR.puts t("service.start_failed")
+        1
+      end
+    end
+
+    # 常駐のユニットを止める。自動起動の設定は変えない。
+    def stop : Int32
+      return not_installed unless Runtime::Systemd.installed?
+      if Runtime::Systemd.stop
+        puts t("service.stopped")
+        0
+      else
+        STDERR.puts t("service.stop_failed")
+        1
+      end
+    end
+
+    # 自動起動の状態を見せる。target（on、off）を渡せばそちらへ切り替える。
+    #
+    # 状態は systemd のユニットの enable そのもので、設定ファイルには持たない。
+    # 切り替えても今の常駐は起動も停止もしない。
+    def autostart(target : String?) : Int32
+      return not_installed unless Runtime::Systemd.installed?
+      current = Runtime::Systemd.autostart_enabled?
+      unless target
+        puts t(current ? "autostart.current.on" : "autostart.current.off")
+        return 0
+      end
+
+      enabled = target == "on"
+      if enabled == current
+        puts t(current ? "autostart.unchanged.on" : "autostart.unchanged.off")
+        return 0
+      end
+      unless Runtime::Systemd.set_autostart(enabled)
+        STDERR.puts t("autostart.failed")
+        return 1
+      end
+      puts t(enabled ? "autostart.changed.on" : "autostart.changed.off")
+      0
+    end
+
+    private def not_installed : Int32
+      STDERR.puts t("service.not_installed")
+      1
+    end
+
     # 自動更新の前回の確認時刻を消し、次のタイマー（30 分以内）で新しいチャンネルを確かめさせる。
     # 消さないと、切り替えても update.check_interval_h が経つまで何も起きない。
     # 更新が走っている最中なら触らない。その更新が時刻を書き戻すためである。
@@ -737,6 +800,9 @@ module KxFrameControllerManager
     in .uninstall?  then Tool.new.uninstall
     in .update?     then Tool.new.update(auto: parsed.argument == Runtime::CLI::AUTO)
     in .channel?    then Tool.new.channel(parsed.argument)
+    in .start?      then Tool.new.start
+    in .stop?       then Tool.new.stop
+    in .autostart?  then Tool.new.autostart(parsed.argument)
     in .version?
       puts VERSION
       0
