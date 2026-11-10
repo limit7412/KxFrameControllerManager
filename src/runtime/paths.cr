@@ -70,6 +70,11 @@ module Runtime
       File.join(xdg("XDG_CONFIG_HOME", ".config", env), "systemd", "user", "kx-frame-controller-manager.service")
     end
 
+    # VR のメニューの「プログラムを起動」に出す .desktop。既定は ~/.local/share/applications/。
+    def self.desktop_entry_path(env = ENV) : String
+      File.join(xdg("XDG_DATA_HOME", File.join(".local", "share"), env), "applications", "kx-frame-controller-manager.desktop")
+    end
+
     # 起動した実行ファイルの絶対パス。
     # vrmanifest の binary_path_linux と、更新での置き換えに使う。
     def self.executable_path : String

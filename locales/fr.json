@@ -29,6 +29,7 @@
   "disconnect.unconfirmed": "{target} : requête envoyée, mais déconnexion non confirmée ({serial})",
   "disconnect.send_failed": "{target} : impossible d'envoyer la requête ({serial})",
   "install.done": "Unité écrite et démarrée : {path}\nExécutable : {executable}",
+  "install.desktop_entry": "Ajouté à « Lancer un programme » dans le menu VR : {path}",
   "install.failed": "Échec de l'activation de l'unité. Consultez la sortie de systemctl ci-dessus",
   "uninstall.done": "Unité arrêtée et supprimée",
   "uninstall.failed": "Échec de la suppression de l'unité. Consultez la sortie de systemctl ci-dessus",
@@ -203,5 +204,6 @@
   "steamvr.description": "Éteint les manettes Steam Frame par un appui long.",
   "steamvr.action_set": "KxFrameControllerManager",
   "steamvr.action.power_off": "Éteindre cette manette (appui long)",
-  "steamvr.action.haptic": "Retour haptique"
+  "steamvr.action.haptic": "Retour haptique",
+  "desktop_entry.comment": "Démarre KxFCM, qui éteint les manettes Steam Frame par un appui long"
 }

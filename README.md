@@ -112,7 +112,8 @@ SteamVR のコントローラーバインド画面で KxFrameControllerManager �
 本ツールを止めるときは、設定画面の「全般」のタブで「KxFCM を終了」を 2 回押す。
 終了するとタブも消える。
 次に Frame を起動したときに、本ツールも起動し直す。
-すぐに戻すときは、端末から次のコマンドを実行する。
+すぐに戻すときは、VR のメニューの「プログラムを起動」から「KxFrameControllerManager」を選ぶ。
+端末から次のコマンドを実行しても同じである。
 
 ```sh
 ~/.local/bin/kx-frame-controller-manager start
@@ -120,7 +121,7 @@ SteamVR のコントローラーバインド画面で KxFrameControllerManager �
 
 Frame の起動時に本ツールを起動させたくないときは、同じタブで「Frame の起動時に自動で起動」を OFF にする。
 OFF にしても、動いている本ツールはそのまま動き続ける。
-以後は上の `start` を実行したときだけ動く。
+以後は「プログラムを起動」から選んだときか、上の `start` を実行したときだけ動く。
 端末からは `autostart on` と `autostart off` で切り替えられ、`autostart` だけなら今の状態を表示する。
 
 ## アンインストール

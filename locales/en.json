@@ -29,6 +29,7 @@
   "disconnect.unconfirmed": "{target}: sent the request, but could not confirm the disconnect ({serial})",
   "disconnect.send_failed": "{target}: could not send the request ({serial})",
   "install.done": "Wrote and started the unit: {path}\nExecutable: {executable}",
+  "install.desktop_entry": "Added to \"Launch a program\" in the VR menu: {path}",
   "install.failed": "Failed to enable the unit. Check the systemctl output above",
   "uninstall.done": "Stopped and removed the unit",
   "uninstall.failed": "Failed to remove the unit. Check the systemctl output above",
@@ -203,5 +204,6 @@
   "steamvr.description": "Turns off Steam Frame controllers with a long press.",
   "steamvr.action_set": "KxFrameControllerManager",
   "steamvr.action.power_off": "Turn off this controller (hold)",
-  "steamvr.action.haptic": "Haptic feedback"
+  "steamvr.action.haptic": "Haptic feedback",
+  "desktop_entry.comment": "Starts KxFCM, which turns off Steam Frame controllers with a long press"
 }

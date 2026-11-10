@@ -57,6 +57,7 @@ src/
     scheduler.cr                     主ループの 1 拍で何を呼ぶか
     cli.cr                           コマンドの解釈
     systemd.cr                       ユニットの書き出し、systemctl --user の呼び出し、自動起動の状態の読み取り
+    desktop_entry.cr                 VR のメニューの「プログラムを起動」に出す .desktop の書き出しと削除
   error/
     usecase.cr                       例外のログ記録
 actions/                           SteamVR Input のアクションマニフェストと frame_controller の既定バインド
@@ -184,6 +185,8 @@ SteamVR が動いていないことは `VRInitError_Init_NoServerForBackgroundAp
 
 vrmanifest は接続のたびに書き出し直して登録する。
 目的は SteamVR のコントローラーバインド画面に本ツールを出すことであり、自動起動には使わない。
+VR のメニューの「プログラムを起動」の一覧も vrmanifest からは作られない。
+その一覧は Steam が `.desktop` ファイルから作るため、`Runtime::DesktopEntry` が別に書き出す（[導入](setup.md#vr-のメニューからの起動)）。
 実行ファイルのパスは `binary_path_linux` に書く。
 
 ## 仕様書からの変更点

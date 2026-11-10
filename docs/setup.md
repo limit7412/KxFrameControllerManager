@@ -143,6 +143,7 @@ SteamVR そのものは再起動しない。
 | ログ | `~/.local/state/KxFrameControllerManager/logs/` |
 | 省電力で変える前の値 | `~/.local/state/KxFrameControllerManager/power_save.json` |
 | systemd のユニット | `~/.config/systemd/user/kx-frame-controller-manager.service` |
+| 「プログラムを起動」の項目 | `~/.local/share/applications/kx-frame-controller-manager.desktop` |
 
 ## 常駐の管理
 
@@ -177,6 +178,23 @@ journalctl --user -u kx-frame-controller-manager      # ログ
 タイマーから起きた更新は、常駐が止まっていれば実行ファイルを置き換えるだけで、常駐を起動しない。
 終了した常駐や、自動起動を無効にした常駐を、更新が勝手に起こすことはない。
 
+### VR のメニューからの起動
+
+VR のメニューの「プログラムを起動」には「KxFrameControllerManager」が出る。
+選ぶと `start` を実行する。常駐が既に動いていれば何も起きない。
+
+この一覧は Steam が作る。
+Steam は `~/.local/share/applications/` などにある `.desktop` ファイルを集めて並べ、選ばれたらその `Exec` の行を実行する。
+vrmanifest の登録はこの一覧に関わらない。
+本ツールは `install` のときと、常駐が起動するたびに `kx-frame-controller-manager.desktop` を書き出す。
+常駐の起動のたびに書くのは、自動更新が `install` を通らずに版を上げるためである。
+この項目が無い版から自動更新で上げた環境にも、新しい版が起動した時点で入る。
+`uninstall` はこのファイルも消す。
+Steam のファイル（`shortcuts.vdf` など）は書き換えない。
+
+書き出した直後は一覧に出ないことがある。
+Steam が一覧を作り直すまでの間である。一覧を一度開き直すか、Frame を再起動すると出る。
+
 `install` をやり直すと（導入の 1 行の再実行を含む）、自動起動は有効に戻る。
 `install` は導入の手順そのものであり、利用者が明示して実行するためである。
 
@@ -188,7 +206,7 @@ journalctl --user -u kx-frame-controller-manager      # ログ
 
 ```sh
 ~/.local/bin/kx-frame-controller-manager update     # 待たずに確かめ、新しい版があれば置き換えて起動し直す
-~/.local/bin/kx-frame-controller-manager uninstall  # ユニットとタイマーを止めて消す
+~/.local/bin/kx-frame-controller-manager uninstall  # ユニットとタイマーを止めて消し、「プログラムを起動」の項目も消す
 ```
 
 導入の 1 行をもう一度実行しても、最新の版へ置き換えて起動し直す。

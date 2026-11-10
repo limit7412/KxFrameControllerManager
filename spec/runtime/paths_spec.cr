@@ -35,3 +35,12 @@ describe "Runtime::Paths.systemd_unit_path" do
       .should eq "/home/deck/.config/systemd/user/kx-frame-controller-manager.service"
   end
 end
+
+describe "Runtime::Paths.desktop_entry_path" do
+  it "XDG_DATA_HOME の下の applications に置く" do
+    Runtime::Paths.desktop_entry_path({"HOME" => "/home/deck"})
+      .should eq "/home/deck/.local/share/applications/kx-frame-controller-manager.desktop"
+    Runtime::Paths.desktop_entry_path({"HOME" => "/home/deck", "XDG_DATA_HOME" => "/data"})
+      .should eq "/data/applications/kx-frame-controller-manager.desktop"
+  end
+end

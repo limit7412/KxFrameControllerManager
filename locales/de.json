@@ -29,6 +29,7 @@
   "disconnect.unconfirmed": "{target}: Anfrage gesendet, Trennung aber nicht bestätigt ({serial})",
   "disconnect.send_failed": "{target}: Anfrage konnte nicht gesendet werden ({serial})",
   "install.done": "Unit geschrieben und gestartet: {path}\nProgrammdatei: {executable}",
+  "install.desktop_entry": "Zu „Programm starten“ im VR-Menü hinzugefügt: {path}",
   "install.failed": "Aktivieren der Unit fehlgeschlagen. Prüfen Sie die Ausgabe von systemctl oben",
   "uninstall.done": "Unit gestoppt und entfernt",
   "uninstall.failed": "Entfernen der Unit fehlgeschlagen. Prüfen Sie die Ausgabe von systemctl oben",
@@ -203,5 +204,6 @@
   "steamvr.description": "Schaltet Steam-Frame-Controller durch langes Drücken aus.",
   "steamvr.action_set": "KxFrameControllerManager",
   "steamvr.action.power_off": "Diesen Controller ausschalten (halten)",
-  "steamvr.action.haptic": "Haptisches Feedback"
+  "steamvr.action.haptic": "Haptisches Feedback",
+  "desktop_entry.comment": "Startet KxFCM, das Steam-Frame-Controller per langem Drücken ausschaltet"
 }

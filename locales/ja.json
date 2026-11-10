@@ -29,6 +29,7 @@
   "disconnect.unconfirmed": "{target}: 切断要求を送りましたが、切れたことを確かめられませんでした（{serial}）",
   "disconnect.send_failed": "{target}: 切断要求を送れませんでした（{serial}）",
   "install.done": "ユニットを書き出して起動しました: {path}\n実行ファイル: {executable}",
+  "install.desktop_entry": "VR のメニューの「プログラムを起動」に追加しました: {path}",
   "install.failed": "ユニットの有効化に失敗しました。上の systemctl の出力を確かめてください",
   "uninstall.done": "ユニットを止めて消しました",
   "uninstall.failed": "ユニットの解除に失敗しました。上の systemctl の出力を確かめてください",
@@ -203,5 +204,6 @@
   "steamvr.description": "長押しで Steam Frame のコントローラーを切断します。",
   "steamvr.action_set": "KxFrameControllerManager",
   "steamvr.action.power_off": "このコントローラーを切断（長押し）",
-  "steamvr.action.haptic": "振動"
+  "steamvr.action.haptic": "振動",
+  "desktop_entry.comment": "KxFCM の常駐を起動します。長押しで Steam Frame のコントローラーを切断します"
 }

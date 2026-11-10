@@ -29,6 +29,7 @@
   "disconnect.unconfirmed": "{target}: 已送出中斷請求，但無法確認已中斷（{serial}）",
   "disconnect.send_failed": "{target}: 無法送出中斷請求（{serial}）",
   "install.done": "已寫入並啟動單元: {path}\n執行檔: {executable}",
+  "install.desktop_entry": "已加入 VR 選單的「啟動程式」: {path}",
   "install.failed": "啟用單元失敗。請查看上方 systemctl 的輸出",
   "uninstall.done": "已停止並移除單元",
   "uninstall.failed": "移除單元失敗。請查看上方 systemctl 的輸出",
@@ -203,5 +204,6 @@
   "steamvr.description": "長按即可關閉 Steam Frame 的控制器。",
   "steamvr.action_set": "KxFrameControllerManager",
   "steamvr.action.power_off": "中斷此控制器（長按）",
-  "steamvr.action.haptic": "震動"
+  "steamvr.action.haptic": "震動",
+  "desktop_entry.comment": "啟動 KxFCM 常駐程式。長按即可中斷 Steam Frame 控制器"
 }
