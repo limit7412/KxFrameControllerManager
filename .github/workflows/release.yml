@@ -80,7 +80,7 @@ jobs:
 
       - name: リリースへ添付する
         if: github.event_name == 'release'
-        uses: softprops/action-gh-release@v3.0.3
+        uses: softprops/action-gh-release@v3.0.4
         with:
           # 実行ファイル単体の添付は外さない。`update` コマンドが名前で探している。
           files: |

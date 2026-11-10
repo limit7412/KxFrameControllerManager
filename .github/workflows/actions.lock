@@ -11,12 +11,12 @@ workflows:
     '.github/workflows/prerelease.yml':
         - 'actions/checkout@v7.0.1'
         - 'crystal-lang/install-crystal@v1.9.5'
-        - 'softprops/action-gh-release@v3.0.3'
+        - 'softprops/action-gh-release@v3.0.4'
     '.github/workflows/release.yml':
         - 'actions/checkout@v7.0.1'
         - 'actions/upload-artifact@v7.0.2'
         - 'crystal-lang/install-crystal@v1.9.5'
-        - 'softprops/action-gh-release@v3.0.3'
+        - 'softprops/action-gh-release@v3.0.4'
     '.github/workflows/verify-lockfile.yml':
         - 'actions/checkout@v7.0.1'
 dependencies:
@@ -35,8 +35,8 @@ dependencies:
         commit: 'sha1-36a22e9145188eec527c96e5a789ce4b832af587'
         owner_id: 6539796
         repo_id: 261006136
-    'softprops/action-gh-release@v3.0.3':
-        ref: 'v3.0.3'
-        commit: 'sha1-efb35369e0ad2afab669f228072c1b0d510eae64'
+    'softprops/action-gh-release@v3.0.4':
+        ref: 'v3.0.4'
+        commit: 'sha1-8a0cd651e5b2365bd640854a3fa5dfc70e4875f3'
         owner_id: 2242
         repo_id: 204253808
