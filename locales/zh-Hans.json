@@ -29,6 +29,7 @@
   "disconnect.unconfirmed": "{target}: 已发送断开请求，但无法确认已断开（{serial}）",
   "disconnect.send_failed": "{target}: 无法发送断开请求（{serial}）",
   "install.done": "已写入并启动单元: {path}\n可执行文件: {executable}",
+  "install.desktop_entry": "已添加到 VR 菜单的“启动程序”: {path}",
   "install.failed": "启用单元失败。请查看上方 systemctl 的输出",
   "uninstall.done": "已停止并删除单元",
   "uninstall.failed": "删除单元失败。请查看上方 systemctl 的输出",
@@ -203,5 +204,6 @@
   "steamvr.description": "长按即可关闭 Steam Frame 的控制器。",
   "steamvr.action_set": "KxFrameControllerManager",
   "steamvr.action.power_off": "断开此控制器（长按）",
-  "steamvr.action.haptic": "振动"
+  "steamvr.action.haptic": "振动",
+  "desktop_entry.comment": "启动 KxFCM 常驻程序。长按即可断开 Steam Frame 控制器"
 }

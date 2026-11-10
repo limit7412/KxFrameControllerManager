@@ -29,6 +29,7 @@
   "disconnect.unconfirmed": "{target}: запрос отправлен, но отключение не подтверждено ({serial})",
   "disconnect.send_failed": "{target}: не удалось отправить запрос ({serial})",
   "install.done": "Юнит записан и запущен: {path}\nИсполняемый файл: {executable}",
+  "install.desktop_entry": "Добавлено в «Запустить программу» в меню VR: {path}",
   "install.failed": "Не удалось включить юнит. Проверьте вывод systemctl выше",
   "uninstall.done": "Юнит остановлен и удалён",
   "uninstall.failed": "Не удалось удалить юнит. Проверьте вывод systemctl выше",
@@ -203,5 +204,6 @@
   "steamvr.description": "Выключает контроллеры Steam Frame долгим нажатием.",
   "steamvr.action_set": "KxFrameControllerManager",
   "steamvr.action.power_off": "Выключить этот контроллер (удерживать)",
-  "steamvr.action.haptic": "Вибрация"
+  "steamvr.action.haptic": "Вибрация",
+  "desktop_entry.comment": "Запускает KxFCM, который выключает контроллеры Steam Frame долгим нажатием"
 }

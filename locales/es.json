@@ -29,6 +29,7 @@
   "disconnect.unconfirmed": "{target}: se envió la solicitud, pero no se pudo confirmar la desconexión ({serial})",
   "disconnect.send_failed": "{target}: no se pudo enviar la solicitud ({serial})",
   "install.done": "Unidad escrita e iniciada: {path}\nEjecutable: {executable}",
+  "install.desktop_entry": "Añadido a «Iniciar un programa» en el menú de RV: {path}",
   "install.failed": "No se pudo activar la unidad. Revisa la salida de systemctl de arriba",
   "uninstall.done": "Unidad detenida y eliminada",
   "uninstall.failed": "No se pudo eliminar la unidad. Revisa la salida de systemctl de arriba",
@@ -203,5 +204,6 @@
   "steamvr.description": "Apaga los mandos de Steam Frame con una pulsación larga.",
   "steamvr.action_set": "KxFrameControllerManager",
   "steamvr.action.power_off": "Apagar este mando (mantener)",
-  "steamvr.action.haptic": "Vibración"
+  "steamvr.action.haptic": "Vibración",
+  "desktop_entry.comment": "Inicia KxFCM, que apaga los mandos de Steam Frame con una pulsación larga"
 }

@@ -125,3 +125,4 @@ crystal run scripts/preview_dashboard.cr -- tmp/dashboard-preview
 - SteamVR の起動でつながり、vrmanifest を登録できること
 - SteamVR の終了で OpenVR を閉じ、次の起動でつなぎ直すこと
 - `IVRSystem_026` と `IVRApplications_008` が `VR_IsInterfaceVersionValid` を通ること
+- VR のメニューの「プログラムを起動」の一覧に「KxFrameControllerManager」が出て、選ぶと常駐が起動すること

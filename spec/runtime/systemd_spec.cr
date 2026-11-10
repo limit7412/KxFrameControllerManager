@@ -2,10 +2,13 @@ require "../spec_helper"
 
 private class FakeSystemctl < Runtime::Systemd::Systemctl
   getter calls = [] of Array(String)
+  # 出力を捨てた呼び出し。calls にも同じものを積む。
+  getter quiet_calls = [] of Array(String)
   property fail = false
 
-  def run(arguments : Array(String)) : Bool
+  def run(arguments : Array(String), quiet : Bool = false) : Bool
     @calls << arguments
+    @quiet_calls << arguments if quiet
     !@fail
   end
 
@@ -124,5 +127,7 @@ describe Runtime::Systemd do
       ["start", Runtime::Systemd::UNIT_NAME],
       ["stop", Runtime::Systemd::UNIT_NAME],
     ]
+    # 読み込まれていないユニットの reset-failed は失敗して警告を出すが、起動には差し支えない。
+    systemctl.quiet_calls.should eq [["reset-failed", Runtime::Systemd::UNIT_NAME]]
   end
 end

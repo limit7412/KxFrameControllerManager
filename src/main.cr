@@ -8,6 +8,7 @@ require "./frame_link/websocket_repository"
 require "./power_off/usecase"
 require "./power_save/usecase"
 require "./runtime/cli"
+require "./runtime/desktop_entry"
 require "./runtime/i18n"
 require "./runtime/logging"
 require "./runtime/paths"
@@ -201,6 +202,7 @@ module KxFrameControllerManager
       load_config
       trap_signals
       mark_running
+      write_desktop_entry
       check_update
 
       until @stop_requested
@@ -383,6 +385,18 @@ module KxFrameControllerManager
     end
 
     # 起動したことを残す。自動更新は、置き換えた版がここまで来たことで起動を確かめる。
+    # VR のメニューの「プログラムを起動」に出す .desktop を、無いか古ければ書き出す。
+    #
+    # `install` も書き出すが、自動更新は `install` を通らずに実行ファイルを置き換えて常駐を起動し直す。
+    # .desktop より前の版から上げた環境にも、置き換えた版が起動した時点で入るようにする。
+    # `install` を経ずに `run` を直接起動した環境（開発中など）には書かない。
+    private def write_desktop_entry : Nil
+      return unless Runtime::Systemd.installed?
+      Runtime::DesktopEntry.write(Runtime::Paths.executable_path)
+    rescue exception : ArgumentError | File::Error
+      Log.warn(exception: exception) { ".desktop を書き出せなかった" }
+    end
+
     private def mark_running : Nil
       @errors.guard("error.update") do
         Update::FileStateStore.write_marker(Runtime::Paths.running_marker_path, VERSION, Process.pid)
@@ -555,6 +569,8 @@ module KxFrameControllerManager
       executable = Runtime::Paths.executable_path
       if Runtime::Systemd.install(executable)
         puts t("install.done", {"path" => Runtime::Paths.systemd_unit_path, "executable" => executable})
+        Runtime::DesktopEntry.write(executable)
+        puts t("install.desktop_entry", {"path" => Runtime::Paths.desktop_entry_path})
         0
       else
         STDERR.puts t("install.failed")
@@ -573,6 +589,8 @@ module KxFrameControllerManager
       ensure
         state.unlock
       end
+      # 一覧の項目は、ユニットの解除に失敗しても消す。残すと、選んでも起動できない項目が並ぶ。
+      Runtime::DesktopEntry.delete
       if removed
         puts t("uninstall.done")
         0

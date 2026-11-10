@@ -112,7 +112,8 @@ To stop automatic updates, turn off "Update automatically" in the "Update" tab.
 To stop the tool, press "Quit KxFCM" twice in the "General" tab of the settings screen.
 The tab disappears when the tool quits.
 The tool starts again the next time Frame starts.
-To bring it back right away, run the following command in a terminal.
+To bring it back right away, choose "KxFrameControllerManager" from "Launch a program" in the VR menu.
+Running the following command in a terminal does the same.
 
 ```sh
 ~/.local/bin/kx-frame-controller-manager start
@@ -120,7 +121,7 @@ To bring it back right away, run the following command in a terminal.
 
 If you do not want the tool to start with Frame, turn off "Start automatically with Frame" in the same tab.
 Turning it off does not stop the running tool.
-From then on, the tool runs only when you run `start` above.
+From then on, the tool runs only when you choose it from "Launch a program" or run `start` above.
 From a terminal, `autostart on` and `autostart off` switch it, and `autostart` alone shows the current state.
 
 ## Uninstalling

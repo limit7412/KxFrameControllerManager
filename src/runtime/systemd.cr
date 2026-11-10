@@ -42,8 +42,11 @@ module Runtime
     # systemctl --user の呼び出し。spec では差し替えて呼び出しを記録する。
     class Systemctl
       # 呼び出しが成功したら true を返す。出力はそのまま利用者へ見せる。
-      def run(arguments : Array(String)) : Bool
-        Process.run("systemctl", ["--user"] + arguments, output: Process::Redirect::Inherit, error: Process::Redirect::Inherit).success?
+      #
+      # quiet が真なら出力を捨てる。失敗しても構わない呼び出し（reset-failed）の警告を見せないために使う。
+      def run(arguments : Array(String), quiet : Bool = false) : Bool
+        redirect = quiet ? Process::Redirect::Close : Process::Redirect::Inherit
+        Process.run("systemctl", ["--user"] + arguments, output: redirect, error: redirect).success?
       rescue exception : File::NotFoundError | IO::Error
         Log.error { "systemctl を呼べなかった: #{exception.message}" }
         false
@@ -116,8 +119,11 @@ module Runtime
     end
 
     # 常駐を起動する。起動の回数の制限に掛かっていれば、それを解いてから起動する。
+    #
+    # reset-failed は、ユニットが読み込まれていなければ「not loaded」と失敗する。
+    # 自動起動を切って Frame を起動し直した後がそうであり、起動には差し支えないので、出力を捨てて結果も見ない。
     def self.start(systemctl : Systemctl = Systemctl.new) : Bool
-      systemctl.run(["reset-failed", UNIT_NAME])
+      systemctl.run(["reset-failed", UNIT_NAME], quiet: true)
       systemctl.run(["start", UNIT_NAME])
     end
 
@@ -144,7 +150,7 @@ module Runtime
       end
 
       def reset_failed : Nil
-        @systemctl.run(["reset-failed", UNIT_NAME])
+        @systemctl.run(["reset-failed", UNIT_NAME], quiet: true)
       end
     end
 
