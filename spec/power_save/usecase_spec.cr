@@ -10,6 +10,7 @@ private def build(enabled = true, delay_s = 10)
   link.list_result = PowerOff::ControllerList.new
   config = Config::PowerSaveSection.new
   config.enabled = enabled
+  config.brightness = true
   config.delay_s = delay_s
   usecase = PowerSave::Usecase.new(settings, store, link, config)
   {usecase, settings, store, link}
@@ -77,6 +78,7 @@ describe PowerSave::Usecase do
     usecase, settings, _, _ = build
     config = Config::PowerSaveSection.new
     config.enabled = true
+    config.brightness = true
     config.brightness_gain = 0.1
     usecase.apply(config)
     enter(usecase)

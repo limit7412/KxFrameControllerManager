@@ -124,7 +124,7 @@
   "dashboard.button.thumbstick": "Stick-Klick",
   "dashboard.binding_note": "Eine im SteamVR-Belegungsbildschirm gewählte Belegung hat Vorrang. Höchste Priorität erfordert Experimental overlay input overrides",
   "dashboard.rebind_pending": "Tastenänderungen werden beim Schließen des Dashboards übernommen",
-  "dashboard.power_save_note": "Energiesparen ist standardmäßig AUS, bis es auf echter Hardware getestet ist",
+  "dashboard.power_save_note": "Energiesparen ist standardmäßig AUS",
   "dashboard.config_errors": "Die Konfigurationsdatei enthält Fehler; es laufen die vorherigen Einstellungen:",
   "dashboard.save_failed": "Die Konfigurationsdatei konnte nicht geschrieben werden",
   "error.update": "Fehler beim automatischen Update",

@@ -124,7 +124,7 @@
   "dashboard.button.thumbstick": "Нажатие стика",
   "dashboard.binding_note": "Привязка, выбранная на экране привязок SteamVR, имеет приоритет. Наивысший приоритет требует Experimental overlay input overrides",
   "dashboard.rebind_pending": "Изменения кнопок применятся после закрытия панели",
-  "dashboard.power_save_note": "Энергосбережение по умолчанию выключено, пока не проверено на реальном устройстве",
+  "dashboard.power_save_note": "Энергосбережение по умолчанию выключено",
   "dashboard.config_errors": "В файле конфигурации есть ошибки; работают прежние настройки:",
   "dashboard.save_failed": "Не удалось записать файл конфигурации",
   "error.update": "Сбой автообновления",

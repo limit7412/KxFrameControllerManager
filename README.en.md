@@ -13,9 +13,9 @@ All features planned for v1 are in place.
 - `status`, `list`, and `disconnect` check connectivity and controller matching, and can disconnect a controller without a long press
 - A settings tab named "KxFCM" appears in the SteamVR dashboard. From it you can check status, disconnect manually, and configure button bindings, hold times, and power saving
 - Runs as a systemd user unit. Installation is a single `curl ... | bash` line
-- Power saving while both controllers are disconnected is implemented, but disabled by default until it has been verified on real hardware
+- While both controllers are disconnected, power saving can lower brightness and image quality. Power saving and its brightness option are both disabled by default; enable them from the settings tab or the config file
 
-On real hardware, it has been confirmed that a disconnect request to 27062 turns a controller off (2026-11-09).
+On real hardware, it has been confirmed that a disconnect request to 27062 turns a controller off (2026-11-09), and that power saving starts and is undone on reconnection (2026-11-10).
 Whether a background app can read SteamVR Input, and whether haptic feedback works, has not been verified yet.
 
 ## Requirements
