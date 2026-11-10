@@ -327,6 +327,25 @@ describe Dashboard::View do
     actions.should contain "update:run"
   end
 
+  it "チャンネルを切り替える場所は置かず、test のときだけ版の横に添える" do
+    translate = ->(key : String, _vars : Hash(String, String)) { key }
+    state = Dashboard::ViewState.new
+    state.tab = Dashboard::Tab::Update
+    state.snapshot = snapshot
+
+    stable = Fakes::Canvas.new
+    hits = Dashboard::View.new(translate, "").render(stable, state, Config::Root.default)
+    hits.none?(&.action.includes?("channel")).should be_true
+    stable.texts.should_not contain "dashboard.update.version_test"
+
+    root = Config::Root.default
+    root.update.channel = "test"
+    test = Fakes::Canvas.new
+    hits = Dashboard::View.new(translate, "").render(test, state, root)
+    hits.none?(&.action.includes?("channel")).should be_true
+    test.texts.should contain "dashboard.update.version_test"
+  end
+
   it "更新が走っている間は、どちらのボタンも押せず、段階を見せる" do
     canvas = Fakes::Canvas.new
     hits = update_tab_hits(update_status(phase: "restarting"), canvas)

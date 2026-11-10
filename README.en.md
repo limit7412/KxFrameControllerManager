@@ -37,6 +37,7 @@ sudo is not required.
 Running the same line again replaces the installation with the newest version and restarts it.
 
 To install a prerelease, write `bash -s -- --prerelease` instead of `bash`. To install a specific version, write `bash -s -- --version 0.1.0`.
+For developers who want auto-update to keep taking prereleases, write `bash -s -- --channel test`. It can also be switched later with `kx-frame-controller-manager channel test` (see the [release channel](docs/configuration.md#リリースチャンネル) section, Japanese).
 Details, including how to install the tar.gz by hand, are in the [setup guide](docs/setup.md) (Japanese).
 
 ## File locations

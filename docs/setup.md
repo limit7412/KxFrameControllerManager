@@ -41,7 +41,19 @@ curl -fsSL https://raw.githubusercontent.com/limit7412/KxFrameControllerManager/
 curl -fsSL https://raw.githubusercontent.com/limit7412/KxFrameControllerManager/master/packaging/get.sh | bash -s -- --version 0.1.0
 ```
 
-プレリリースを入れたあと自動更新と `update` でもプレリリースを追うには、設定の `update.channel` を `test` にする（[設定リファレンス](configuration.md)）。
+`--prerelease` が選ぶのは今回入れる版だけであり、以後の自動更新と `update` は設定の `update.channel` に従う。
+既定の `stable` のままなら、入れたプレリリースは次の正式リリースで置き換わる。
+
+開発者として以後もプレリリースを追うときは、`--channel test` を付ける。
+プレリリースを含めて最も新しい版を入れたうえで、`update.channel` を `test` に切り替える。
+`--channel stable` を付ければ `stable` へ戻せる。
+何も付けなければ、チャンネルは今の設定のまま変えない。
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/limit7412/KxFrameControllerManager/master/packaging/get.sh | bash -s -- --channel test
+```
+
+入れた後に切り替えるときは `kx-frame-controller-manager channel test` を使う（[設定リファレンス](configuration.md#リリースチャンネル)）。
 
 ### tar.gz を手で入れる
 

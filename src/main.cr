@@ -591,6 +591,68 @@ module KxFrameControllerManager
       result.outcome.failure? ? 1 : 0
     end
 
+    # 更新で追うチャンネル（設定 update.channel）を見せる。target を渡せばそのチャンネルへ切り替える。
+    #
+    # test はプレリリースも取る開発者向けのチャンネルであり、設定画面には切り替えを置いていない。
+    # 切り替えはこのコマンドか、設定ファイルを手で書き換えて行う。
+    def channel(target : String?) : Int32
+      current = @root.update.channel
+      unless target
+        puts t("channel.current.#{current}")
+        return 0
+      end
+
+      if target == current
+        puts t("channel.unchanged.#{current}")
+        return 0
+      end
+
+      # 読めなかった設定の代わりの既定値を書き戻すと、利用者の他の設定が消える。
+      unless @config_loaded
+        STDERR.puts t("channel.config_unreadable")
+        return 1
+      end
+
+      root = @root.dup_snapshot
+      root.update.channel = target
+      repository = Config::FileRepository.new(Runtime::Paths.config_path)
+      errors = KxFrameControllerManager.config_usecase(repository).save(root)
+      unless errors.empty?
+        STDERR.puts t("cli.config_invalid")
+        errors.each { |error| STDERR.puts "  #{KxFrameControllerManager.describe(error)}" }
+        return 1
+      end
+
+      forget_last_check
+      # 常駐は設定画面の「更新を確認」で今のチャンネルを使う。読み直させないと前のチャンネルで確かめ続ける。
+      systemctl = Runtime::Systemd::Systemctl.new
+      systemctl.run(["reload", Runtime::Systemd::UNIT_NAME]) if systemctl.active?
+
+      puts t("channel.changed.#{target}")
+      # stable へ戻しても、入っているプレリリースは古い安定版へは戻さない。同じ版の正式リリースを待つ。
+      running = Update::Version.parse?(VERSION)
+      puts t("channel.waits_for_stable", {"version" => VERSION}) if target == "stable" && running && !running.stable?
+      0
+    rescue exception : File::Error
+      STDERR.puts exception.message
+      1
+    end
+
+    # 自動更新の前回の確認時刻を消し、次のタイマー（30 分以内）で新しいチャンネルを確かめさせる。
+    # 消さないと、切り替えても update.check_interval_h が経つまで何も起きない。
+    # 更新が走っている最中なら触らない。その更新が時刻を書き戻すためである。
+    private def forget_last_check : Nil
+      state = Update::FileStateStore.new(Runtime::Paths.update_state_path, Runtime::Paths.running_marker_path, Runtime::Paths.update_lock_path)
+      return unless state.try_lock
+      begin
+        record = state.load
+        record.last_checked_at = nil
+        state.save(record)
+      ensure
+        state.unlock
+      end
+    end
+
     # 部品を組み立てて SteamVR へ 1 回だけつなぎ、終わったら閉じる。
     # SteamVR が動いていなくても block は呼ぶ。27062 だけでできることはそちらで行う。
     private def with_parts(& : Parts -> Int32) : Int32
@@ -674,6 +736,7 @@ module KxFrameControllerManager
     in .install?    then Tool.new.install
     in .uninstall?  then Tool.new.uninstall
     in .update?     then Tool.new.update(auto: parsed.argument == Runtime::CLI::AUTO)
+    in .channel?    then Tool.new.channel(parsed.argument)
     in .version?
       puts VERSION
       0
