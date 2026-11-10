@@ -30,6 +30,7 @@ module Dashboard
   # - "tab:hold" / "tab:power" / "tab:update" / "tab:general"
   # - "disconnect:left" / "disconnect:right" / "disconnect:both"
   # - "update:check"（新しい版があるかだけを見る） / "update:run"（今すぐ更新する）
+  # - "autostart"（自動起動を切り替える） / "quit"（常駐を終える）
   # - "set:<セクション.キー>:<+1 か -1>"（Toggle は +1 だけ）
   record Hit, x : Float64, y : Float64, w : Float64, h : Float64, action : String do
     def contains?(px : Float64, py : Float64) : Bool
@@ -41,7 +42,7 @@ module Dashboard
   class ViewState
     property tab : Tab = Tab::Hold
     property snapshot : Snapshot? = nil
-    # 1 回目を押して確かめ待ちの対象（left / right / both、または今すぐの更新の update）。
+    # 1 回目を押して確かめ待ちの対象（left / right / both、今すぐの更新の update、終了の quit）。
     property armed : String? = nil
     # 切断を処理しているか。
     property? running : Bool = false
@@ -60,6 +61,11 @@ module Dashboard
     # 画面で確かめたせいで、見つけた版の自動での置き換えが間隔ぶん遅れないようにするためである。
     # 表示ではどちらか新しいほうを「最後の確認」に出す。
     property checked_at : Time? = nil
+    # 自動起動を切り替えている途中か。
+    property? autostart_changing : Bool = false
+    # 全般のタブに出す知らせ。
+    property general_message : String? = nil
+    property general_tone : Tone = Tone::Info
   end
 
   # 画面を描き、押せる場所の一覧を返す。
@@ -139,6 +145,7 @@ module Dashboard
         row(canvas, root, state.snapshot, key, FIELDS_TOP + index * ROW_H, hits)
       end
       update_panel(canvas, state, root, hits) if state.tab.update?
+      general_panel(canvas, state, hits) if state.tab.general?
       footer(canvas, state)
       hits
     end
@@ -242,8 +249,7 @@ module Dashboard
       in .toggle?
         on = value_of(root, key) == "true"
         x = right - TOGGLE_W
-        canvas.fill_rect(x, control_top, TOGGLE_W, CONTROL_H, on ? OK : BUTTON, CONTROL_H / 2)
-        fit_text(canvas, x + TOGGLE_W / 2, center, t(on ? "dashboard.on" : "dashboard.off"), BODY_SIZE, on ? BACKGROUND : MUTED, TOGGLE_W - 12, bold: true, align: Align::Center)
+        toggle(canvas, x, control_top, on, t(on ? "dashboard.on" : "dashboard.off"))
         hits << Hit.new(x, control_top, TOGGLE_W, CONTROL_H, "set:#{key}:+1")
       in .choice?, .stepper?
         plus_x = right - ARROW_W
@@ -256,6 +262,11 @@ module Dashboard
         hits << Hit.new(minus_x, control_top, ARROW_W, CONTROL_H, "set:#{key}:-1")
         hits << Hit.new(plus_x, control_top, ARROW_W, CONTROL_H, "set:#{key}:+1")
       end
+    end
+
+    private def toggle(canvas : Canvas, x : Float64, y : Float64, on : Bool, label : String) : Nil
+      canvas.fill_rect(x, y, TOGGLE_W, CONTROL_H, on ? OK : BUTTON, CONTROL_H / 2)
+      fit_text(canvas, x + TOGGLE_W / 2, y + CONTROL_H / 2, label, BODY_SIZE, on ? BACKGROUND : MUTED, TOGGLE_W - 12, bold: true, align: Align::Center)
     end
 
     private def arrow(canvas : Canvas, x : Float64, y : Float64, label : String) : Nil
@@ -427,6 +438,56 @@ module Dashboard
         wrap(canvas, message, RIGHT_W - 40, SMALL_SIZE).first(2).each_with_index do |line, index|
           canvas.text(RIGHT_X + 20, buttons_top + 82 + index * 22, line, SMALL_SIZE, color)
         end
+      end
+    end
+
+    # 全般のタブの下半分の枠。上には表示言語の説明が最長で 6 行入り、下には設定の誤りの 2 行が入る。
+    GENERAL_PANEL_TOP = 392.0
+    GENERAL_PANEL_H   = 196.0
+
+    # 全般のタブの下半分。自動起動の切り替えと、常駐の終了を並べる。
+    #
+    # 自動起動は設定ファイルの項目ではなく systemd のユニットの状態なので、Editor::FIELDS には載せず、ここで描く。
+    private def general_panel(canvas : Canvas, state : ViewState, hits : Array(Hit)) : Nil
+      top = GENERAL_PANEL_TOP
+      canvas.fill_rect(RIGHT_X, top, RIGHT_W, GENERAL_PANEL_H, PANEL, 14.0)
+      snapshot = state.snapshot
+      autostart = snapshot.try(&.autostart)
+
+      center = top + 8 + ROW_H / 2
+      control_top = center - CONTROL_H / 2
+      toggle_x = RIGHT_X + RIGHT_W - 20 - TOGGLE_W
+      fit_text(canvas, RIGHT_X + 20, center, t("dashboard.field.autostart"), BODY_SIZE, TEXT, toggle_x - RIGHT_X - 40)
+      if autostart.nil?
+        toggle(canvas, toggle_x, control_top, false, snapshot ? t("dashboard.autostart.unavailable") : "-")
+      else
+        label = state.autostart_changing? ? "…" : t(autostart ? "dashboard.on" : "dashboard.off")
+        toggle(canvas, toggle_x, control_top, autostart, label)
+        hits << Hit.new(toggle_x, control_top, TOGGLE_W, CONTROL_H, "autostart") unless state.autostart_changing?
+      end
+
+      # 更新が走っている間は終えさせない。置き換えた版の起動を確かめている最中に止めると、戻されてしまう。
+      enabled = snapshot.try(&.update.phase).nil?
+      armed = state.armed == "quit"
+      button_x = RIGHT_X + 20
+      button_y = top + 8 + ROW_H + 4
+      button_w = RIGHT_W - 40
+      canvas.fill_rect(button_x, button_y, button_w, 52.0, armed ? DANGER : BUTTON, 10.0)
+      canvas.stroke_rect(button_x, button_y, button_w, 52.0, enabled ? DANGER : LINE, 10.0, 2.0)
+      label = armed ? t("dashboard.quit.confirm") : t("dashboard.quit")
+      fit_text(canvas, button_x + button_w / 2, button_y + 26, label, BODY_SIZE, enabled ? TEXT : MUTED, button_w - 16, bold: armed, align: Align::Center)
+      hits << Hit.new(button_x, button_y, button_w, 52.0, "quit") if enabled
+
+      message = state.general_message
+      text, color = if message
+                      {message, tone_color(state.general_tone)}
+                    elsif snapshot && autostart.nil?
+                      {t("dashboard.autostart.not_installed"), WARN}
+                    else
+                      {t("dashboard.quit.note"), MUTED}
+                    end
+      wrap(canvas, text, RIGHT_W - 40, SMALL_SIZE).first(3).each_with_index do |line, index|
+        canvas.text(RIGHT_X + 20, button_y + 70 + index * 22, line, SMALL_SIZE, color)
       end
     end
 

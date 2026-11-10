@@ -12,12 +12,15 @@ module Runtime
       Uninstall
       Update
       Channel
+      Start
+      Stop
+      Autostart
       Version
       Help
     end
 
     # 解釈の結果。argument は disconnect の対象（left、right、both、シリアル）、update の --auto、
-    # channel の切り替え先（stable、test）に使う。
+    # channel の切り替え先（stable、test）、autostart の切り替え先（on、off）に使う。
     # error が入っていれば、使い方の誤りとして終了コード 2 で終える。
     record Parsed, command : Command, argument : String? = nil, error : String? = nil
 
@@ -26,6 +29,9 @@ module Runtime
     # channel が受け付ける綴り。設定 update.channel の値（Update::CHANNELS）と同じものを並べる。
     # CLI は update を知らないため、同じ並びであることは spec で確かめる。
     CHANNELS = %w[stable test]
+
+    # autostart が受け付ける綴り。
+    AUTOSTART = %w[on off]
 
     def self.parse(args : Array(String)) : Parsed
       name = args.first?
@@ -46,6 +52,14 @@ module Runtime
         target = rest.first
         return Parsed.new(Command::Channel, target, "cli.channel_invalid") if rest.size > 1 || !CHANNELS.includes?(target)
         Parsed.new(Command::Channel, target)
+      when "start" then no_argument(Command::Start, rest)
+      when "stop"  then no_argument(Command::Stop, rest)
+      when "autostart"
+        # 引数が無ければ今の状態を見せ、on か off があればそちらへ切り替える。
+        return Parsed.new(Command::Autostart) if rest.empty?
+        target = rest.first
+        return Parsed.new(Command::Autostart, target, "cli.autostart_invalid") if rest.size > 1 || !AUTOSTART.includes?(target)
+        Parsed.new(Command::Autostart, target)
       when "version", "--version" then Parsed.new(Command::Version)
       when nil                    then Parsed.new(Command::Help, error: "")
       when "help", "--help", "-h" then Parsed.new(Command::Help)

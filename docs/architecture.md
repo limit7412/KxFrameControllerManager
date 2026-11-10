@@ -41,7 +41,7 @@ src/
     cairo.cr                         libcairo を dlopen して描く実装
     models.cr                        画面へ見せる状態、画面から変える項目と 1 段ぶんの変え方
     view.cr                          画面の組み立てと、押せる場所の一覧
-    usecase.cr                       タブの作成と破棄、操作の受け取り、描き直し、手動の切断
+    usecase.cr                       タブの作成と破棄、操作の受け取り、描き直し、手動の切断、終了と自動起動
   config/                          設定
   update/                          更新
     models.cr                        版、添付、リリース
@@ -56,7 +56,7 @@ src/
     i18n.cr                          表示する文字列の辞書
     scheduler.cr                     主ループの 1 拍で何を呼ぶか
     cli.cr                           コマンドの解釈
-    systemd.cr                       ユニットの書き出しと systemctl --user の呼び出し
+    systemd.cr                       ユニットの書き出し、systemctl --user の呼び出し、自動起動の状態の読み取り
   error/
     usecase.cr                       例外のログ記録
 actions/                           SteamVR Input のアクションマニフェストと frame_controller の既定バインド

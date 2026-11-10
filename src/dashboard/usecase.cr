@@ -38,6 +38,11 @@ module Dashboard
     property check_update : Proc({String, String?}) = -> { {"unknown", nil.as(String?)} }
     # 今すぐの更新を、常駐とは別のユニットで始める。始められたら真を返す。
     property start_update : Proc(Bool) = -> { false }
+    # 自動起動を切り替える。切り替えられたら真を返す。
+    property set_autostart : Proc(Bool, Bool) = ->(_enabled : Bool) { false }
+    # 常駐を終える。主ループに終わりを伝えるだけで、すぐには戻らない。
+    # 更新が走っていて終えられなければ偽を返す。
+    property quit : Proc(Bool) = -> { false }
     # 描画先を作る。libcairo が無ければ nil を返す。
     property canvas_factory : Proc(Int32, Int32, Canvas?) = ->(_w : Int32, _h : Int32) { nil.as(Canvas?) }
 
@@ -111,10 +116,15 @@ module Dashboard
         @state.tab = Tab.parse(rest)
         @state.message = nil
         @state.update_message = nil
+        @state.general_message = nil
       when "disconnect"
         press_disconnect(rest, now)
       when "update"
         rest == "run" ? press_update(now) : check_for_update
+      when "autostart"
+        toggle_autostart
+      when "quit"
+        press_quit(now)
       when "set"
         key, _, direction = rest.rpartition(':')
         change(key, direction.to_i)
@@ -266,6 +276,60 @@ module Dashboard
         @state.update_tone = Tone::Error
       end
       @last_status = nil
+    end
+
+    # 自動起動の切り替えは systemctl を待つ。主ループを止めないよう別のファイバで行う。
+    # 画面の値は、次に状態を読み直したときに実際のユニットの状態から出す。設定ファイルには持たない。
+    # 持つと、手で打った systemctl や install のやり直しと食い違うためである。
+    private def toggle_autostart : Nil
+      return if @state.autostart_changing?
+      current = @state.snapshot.try(&.autostart)
+      return if current.nil?
+      @state.autostart_changing = true
+      @state.general_message = nil
+      spawn(name: "dashboard_autostart") do
+        begin
+          unless @set_autostart.call(!current)
+            @state.general_message = @view.t("dashboard.autostart.failed")
+            @state.general_tone = Tone::Error
+          end
+        rescue exception
+          Log.error(exception: exception) { "設定画面から自動起動を切り替えられなかった" }
+          @state.general_message = @view.t("dashboard.autostart.failed")
+          @state.general_tone = Tone::Error
+        ensure
+          @state.autostart_changing = false
+          @last_status = nil
+          @dirty = true
+        end
+      end
+    end
+
+    # 終了も 2 回押しで動かす。終えるとこのタブも消え、VR の中からは起動し直せないためである。
+    #
+    # 更新が走っている間は受け付けない。置き換えた版の起動を確かめている最中に止めると、
+    # 自動更新は起動しなかったものと取り違えて元の版へ戻す。
+    private def press_quit(now : Time::Instant) : Nil
+      return if @state.snapshot.try(&.update.phase)
+      expire_arm(now)
+      unless @state.armed == "quit"
+        @state.armed = "quit"
+        @armed_at = now
+        @state.general_message = nil
+        return
+      end
+
+      @state.armed = nil
+      @armed_at = nil
+      unless @quit.call
+        # 画面の状態は 1 秒ごとの写しなので、1 回目の後に更新が始まっていることがある。
+        @state.general_message = @view.t("dashboard.quit.busy")
+        @state.general_tone = Tone::Warn
+        return
+      end
+      Log.info { "設定画面から終了を求められた" }
+      @state.general_message = @view.t("dashboard.quit.quitting")
+      @state.general_tone = Tone::Info
     end
 
     # GitHub への問い合わせは数秒かかりうる。主ループを止めないよう別のファイバで行う。

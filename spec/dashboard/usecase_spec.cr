@@ -13,7 +13,7 @@ private def update_status(phase : String? = nil, installed : Bool = true, outcom
   )
 end
 
-private def snapshot(errors = [] of String, update = update_status) : Dashboard::Snapshot
+private def snapshot(errors = [] of String, update = update_status, autostart : Bool? = true) : Dashboard::Snapshot
   Dashboard::Snapshot.new(
     steamvr_connected: true,
     left: Dashboard::HandStatus.new(true, "cv.aaaaaaaaaaaa", "view"),
@@ -24,6 +24,7 @@ private def snapshot(errors = [] of String, update = update_status) : Dashboard:
     gain_range: {0.5, 1.6},
     config_errors: errors,
     update: update,
+    autostart: autostart,
   )
 end
 
@@ -236,6 +237,86 @@ describe Dashboard::Usecase do
     usecase.state.update_message.should eq "dashboard.update.check.unreachable"
   end
 
+  it "終了は 2 回目で求める" do
+    usecase, _, _, _ = build
+    quits = 0
+    usecase.quit = -> { quits += 1; true }
+    usecase.state.snapshot = snapshot
+    now = Time.instant
+    usecase.act("quit", now)
+    quits.should eq 0
+    usecase.state.armed.should eq "quit"
+    usecase.act("quit", now)
+    quits.should eq 1
+    usecase.state.general_message.should eq "dashboard.quit.quitting"
+  end
+
+  it "更新の排他を取れず終えられなければ知らせる" do
+    usecase, _, _, _ = build
+    usecase.quit = -> { false }
+    usecase.state.snapshot = snapshot
+    usecase.act("quit")
+    usecase.act("quit")
+    usecase.state.general_message.should eq "dashboard.quit.busy"
+    usecase.state.general_tone.should eq Dashboard::Tone::Warn
+  end
+
+  it "終了の確かめ待ちは時間が経つと解ける" do
+    usecase, _, _, _ = build
+    quits = 0
+    usecase.quit = -> { quits += 1; true }
+    usecase.state.snapshot = snapshot
+    now = Time.instant
+    usecase.act("quit", now)
+    usecase.act("quit", now + Dashboard::Usecase::ARM_TIMEOUT)
+    quits.should eq 0
+    usecase.state.armed.should eq "quit"
+  end
+
+  it "更新が走っている間は終了を受け付けない" do
+    usecase, _, _, _ = build
+    quits = 0
+    usecase.quit = -> { quits += 1; true }
+    usecase.state.snapshot = snapshot(update: update_status(phase: "restarting"))
+    usecase.act("quit")
+    usecase.act("quit")
+    quits.should eq 0
+    usecase.state.armed.should be_nil
+  end
+
+  it "自動起動は今の状態の逆へ切り替え、別のファイバで待つ" do
+    usecase, _, _, _ = build
+    requested = [] of Bool
+    usecase.set_autostart = ->(enabled : Bool) { requested << enabled; true }
+    usecase.state.snapshot = snapshot(autostart: true)
+    usecase.act("autostart")
+    usecase.state.autostart_changing?.should be_true
+    sleep 10.milliseconds
+    requested.should eq [false]
+    usecase.state.autostart_changing?.should be_false
+    usecase.state.general_message.should be_nil
+  end
+
+  it "自動起動を切り替えられなければ知らせる" do
+    usecase, _, _, _ = build
+    usecase.set_autostart = ->(_enabled : Bool) { false }
+    usecase.state.snapshot = snapshot(autostart: false)
+    usecase.act("autostart")
+    sleep 10.milliseconds
+    usecase.state.general_message.should eq "dashboard.autostart.failed"
+    usecase.state.general_tone.should eq Dashboard::Tone::Error
+  end
+
+  it "ユニットが入っていなければ自動起動は切り替えない" do
+    usecase, _, _, _ = build
+    requested = [] of Bool
+    usecase.set_autostart = ->(enabled : Bool) { requested << enabled; true }
+    usecase.state.snapshot = snapshot(autostart: nil)
+    usecase.act("autostart")
+    sleep 10.milliseconds
+    requested.should be_empty
+  end
+
   it "close でタブを消し、次の tick で作り直す" do
     usecase, repository, _, _ = build
     usecase.tick
@@ -376,6 +457,39 @@ describe Dashboard::View do
     actions.should contain "update:check"
     actions.should_not contain "update:run"
     canvas.texts.should contain "dashboard.update.not_installed"
+  end
+
+  it "全般のタブには、自動起動の切り替えと終了のボタンがある" do
+    translate = ->(key : String, _vars : Hash(String, String)) { key }
+    state = Dashboard::ViewState.new
+    state.tab = Dashboard::Tab::General
+    state.snapshot = snapshot
+    canvas = Fakes::Canvas.new
+    actions = Dashboard::View.new(translate, "").render(canvas, state, Config::Root.default).map(&.action)
+    actions.should contain "autostart"
+    actions.should contain "quit"
+    canvas.texts.should contain "dashboard.quit.note"
+  end
+
+  it "ユニットが入っていなければ自動起動は押せず、そう知らせる" do
+    translate = ->(key : String, _vars : Hash(String, String)) { key }
+    state = Dashboard::ViewState.new
+    state.tab = Dashboard::Tab::General
+    state.snapshot = snapshot(autostart: nil)
+    canvas = Fakes::Canvas.new
+    actions = Dashboard::View.new(translate, "").render(canvas, state, Config::Root.default).map(&.action)
+    actions.should_not contain "autostart"
+    actions.should contain "quit"
+    canvas.texts.should contain "dashboard.autostart.not_installed"
+  end
+
+  it "更新が走っている間は終了のボタンを押せない" do
+    translate = ->(key : String, _vars : Hash(String, String)) { key }
+    state = Dashboard::ViewState.new
+    state.tab = Dashboard::Tab::General
+    state.snapshot = snapshot(update: update_status(phase: "downloading"))
+    actions = Dashboard::View.new(translate, "").render(Fakes::Canvas.new, state, Config::Root.default).map(&.action)
+    actions.should_not contain "quit"
   end
 
   it "切断の処理中は切断のボタンを押せない" do

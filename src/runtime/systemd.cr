@@ -93,6 +93,39 @@ module Runtime
       File.exists?(File.join(File.dirname(unit_path), UPDATE_TIMER_NAME))
     end
 
+    # 常駐のユニットが書き出されているか。`install` を経ずに `run` を直接起動した環境には無い。
+    def self.installed?(unit_path : String = Paths.systemd_unit_path) : Bool
+      File.exists?(unit_path)
+    end
+
+    # 自動起動が有効か。`systemctl --user enable` が置くリンクがあるかで見る。
+    #
+    # systemctl is-enabled を呼ばずにリンクを見るのは、設定画面が状態を 1 秒ごとに読み直すためである。
+    # そのたびにプロセスを起こすのは重い。ユニットの WantedBy は default.target なので、リンクはその .wants に置かれる。
+    def self.autostart_enabled?(unit_path : String = Paths.systemd_unit_path) : Bool
+      link = File.join(File.dirname(unit_path), "default.target.wants", UNIT_NAME)
+      !File.info?(link, follow_symlinks: false).nil?
+    end
+
+    # 自動起動を切り替える。enable と disable はユニットの起動と停止をしないので、今の常駐はそのまま動き続ける。
+    #
+    # 自動更新のタイマーは切り替えない。タイマーから起きた更新は、常駐が動いていなければ置き換えるだけで起動しない
+    # （Update::AutoUpdater）。自動起動を切っても、更新が常駐を勝手に起こすことは無い。
+    def self.set_autostart(enabled : Bool, systemctl : Systemctl = Systemctl.new) : Bool
+      systemctl.run([enabled ? "enable" : "disable", "--quiet", UNIT_NAME])
+    end
+
+    # 常駐を起動する。起動の回数の制限に掛かっていれば、それを解いてから起動する。
+    def self.start(systemctl : Systemctl = Systemctl.new) : Bool
+      systemctl.run(["reset-failed", UNIT_NAME])
+      systemctl.run(["start", UNIT_NAME])
+    end
+
+    # 常駐を止める。止めた常駐は、次にログインするまで（自動起動が有効なら）か `start` まで動かない。
+    def self.stop(systemctl : Systemctl = Systemctl.new) : Bool
+      systemctl.run(["stop", UNIT_NAME])
+    end
+
     # 自動更新から常駐のユニットを操作する。
     class UpdateService < Update::ServiceControl
       def initialize(@systemctl : Systemctl = Systemctl.new)

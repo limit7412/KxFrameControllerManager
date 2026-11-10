@@ -187,6 +187,8 @@ module KxFrameControllerManager
       # シグナルのハンドラは別のファイバで走る。主ループはこの印を見て動く。
       @stop_requested = false
       @reload_requested = false
+      # 設定画面から終えるときに取った更新の排他。終わるまで手放さない。
+      @quit_lock = nil.as(Update::FileStateStore?)
       # 27062 の疎通を確かめた接続の番号。つながるたびに 1 回だけ確かめる（仕様書 4.2 節）。
       @probed_generation = nil.as(Int32?)
       # 言語を決め直した接続の番号。Steam の表示言語は SteamVR を起動し直さないと変わらないため、つながるたびに見る。
@@ -272,6 +274,27 @@ module KxFrameControllerManager
         {result.outcome.to_s.underscore, result.release.try(&.tag)}
       end
       dashboard.start_update = -> { Runtime::Systemd.start_manual_update(Runtime::Paths.executable_path) }
+      dashboard.set_autostart = ->(enabled : Bool) do
+        changed = Runtime::Systemd.set_autostart(enabled)
+        Log.info { "設定画面から自動起動を#{enabled ? "有効" : "無効"}にした" } if changed
+        changed
+      end
+      # 終了コード 0 で終える。ユニットは Restart=on-failure なので、systemd は起動し直さない。
+      # systemctl stop を呼ばないのは、ユニットを経ずに `run` を起動した場合にも同じように終えるためである。
+      #
+      # 更新の排他を取れたときだけ終える。取れなければ更新が走っており、置き換えた版の起動を確かめている最中に
+      # 止めると、更新は起動しなかったものと取り違えて元の版へ戻し、常駐を起動し直してしまう。
+      # 排他はプロセスが終わるまで持ち、終える途中で更新が始まらないようにする（flock はプロセスの終了で外れる）。
+      dashboard.quit = -> do
+        state = Update::FileStateStore.new(Runtime::Paths.update_state_path, Runtime::Paths.running_marker_path, Runtime::Paths.update_lock_path)
+        if state.try_lock
+          @quit_lock = state
+          @stop_requested = true
+          true
+        else
+          false
+        end
+      end
       dashboard.canvas_factory = ->(width : Int32, height : Int32) { Dashboard::CairoCanvas.create(width, height).as(Dashboard::Canvas?) }
       dashboard
     end
@@ -296,6 +319,7 @@ module KxFrameControllerManager
         gain_range: connected ? parts.settings.gain_range : nil,
         config_errors: @config_errors.map { |error| KxFrameControllerManager.describe(error) },
         update: update_status,
+        autostart: Runtime::Systemd.installed? ? Runtime::Systemd.autostart_enabled? : nil,
       )
     end
 
@@ -638,6 +662,71 @@ module KxFrameControllerManager
       1
     end
 
+    # 常駐のユニットを起動する。設定画面から終えた常駐を戻すのに使う。
+    def start : Int32
+      return not_installed unless Runtime::Systemd.installed?
+      if Runtime::Systemd.start
+        puts t("service.started")
+        0
+      else
+        STDERR.puts t("service.start_failed")
+        1
+      end
+    end
+
+    # 常駐のユニットを止める。自動起動の設定は変えない。
+    #
+    # 走っている更新が終わるのを、更新の排他を取って待ってから止める（uninstall と同じ）。
+    # 置き換えた版の起動を確かめている最中に止めると、更新は起動しなかったものと取り違えて元の版へ戻し、
+    # 常駐を起動し直してしまう。排他は止め終わるまで持ち、その間に更新が始まらないようにする。
+    def stop : Int32
+      return not_installed unless Runtime::Systemd.installed?
+      state = Update::FileStateStore.new(Runtime::Paths.update_state_path, Runtime::Paths.running_marker_path, Runtime::Paths.update_lock_path)
+      stopped = begin
+        state.lock
+        Runtime::Systemd.stop
+      ensure
+        state.unlock
+      end
+      if stopped
+        puts t("service.stopped")
+        0
+      else
+        STDERR.puts t("service.stop_failed")
+        1
+      end
+    end
+
+    # 自動起動の状態を見せる。target（on、off）を渡せばそちらへ切り替える。
+    #
+    # 状態は systemd のユニットの enable そのもので、設定ファイルには持たない。
+    # 切り替えても今の常駐は起動も停止もしない。
+    def autostart(target : String?) : Int32
+      return not_installed unless Runtime::Systemd.installed?
+      current = Runtime::Systemd.autostart_enabled?
+      unless target
+        puts t(current ? "autostart.current.on" : "autostart.current.off")
+        return 0
+      end
+
+      enabled = target == "on"
+      if enabled == current
+        puts t(current ? "autostart.unchanged.on" : "autostart.unchanged.off")
+        return 0
+      end
+      unless Runtime::Systemd.set_autostart(enabled)
+        STDERR.puts t("autostart.failed")
+        return 1
+      end
+      puts t(enabled ? "autostart.changed.on" : "autostart.changed.off")
+      0
+    end
+
+    private def not_installed : Int32
+      STDERR.puts t("service.not_installed")
+      1
+    end
+
     # 自動更新の前回の確認時刻を消し、次のタイマー（30 分以内）で新しいチャンネルを確かめさせる。
     # 消さないと、切り替えても update.check_interval_h が経つまで何も起きない。
     # 更新が走っている最中なら触らない。その更新が時刻を書き戻すためである。
@@ -737,6 +826,9 @@ module KxFrameControllerManager
     in .uninstall?  then Tool.new.uninstall
     in .update?     then Tool.new.update(auto: parsed.argument == Runtime::CLI::AUTO)
     in .channel?    then Tool.new.channel(parsed.argument)
+    in .start?      then Tool.new.start
+    in .stop?       then Tool.new.stop
+    in .autostart?  then Tool.new.autostart(parsed.argument)
     in .version?
       puts VERSION
       0
