@@ -41,7 +41,8 @@ module Dashboard
     # 自動起動を切り替える。切り替えられたら真を返す。
     property set_autostart : Proc(Bool, Bool) = ->(_enabled : Bool) { false }
     # 常駐を終える。主ループに終わりを伝えるだけで、すぐには戻らない。
-    property quit : Proc(Nil) = -> { }
+    # 更新が走っていて終えられなければ偽を返す。
+    property quit : Proc(Bool) = -> { false }
     # 描画先を作る。libcairo が無ければ nil を返す。
     property canvas_factory : Proc(Int32, Int32, Canvas?) = ->(_w : Int32, _h : Int32) { nil.as(Canvas?) }
 
@@ -320,10 +321,15 @@ module Dashboard
 
       @state.armed = nil
       @armed_at = nil
+      unless @quit.call
+        # 画面の状態は 1 秒ごとの写しなので、1 回目の後に更新が始まっていることがある。
+        @state.general_message = @view.t("dashboard.quit.busy")
+        @state.general_tone = Tone::Warn
+        return
+      end
       Log.info { "設定画面から終了を求められた" }
       @state.general_message = @view.t("dashboard.quit.quitting")
       @state.general_tone = Tone::Info
-      @quit.call
     end
 
     # GitHub への問い合わせは数秒かかりうる。主ループを止めないよう別のファイバで行う。

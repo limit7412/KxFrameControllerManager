@@ -240,7 +240,7 @@ describe Dashboard::Usecase do
   it "終了は 2 回目で求める" do
     usecase, _, _, _ = build
     quits = 0
-    usecase.quit = -> { quits += 1; nil }
+    usecase.quit = -> { quits += 1; true }
     usecase.state.snapshot = snapshot
     now = Time.instant
     usecase.act("quit", now)
@@ -251,10 +251,20 @@ describe Dashboard::Usecase do
     usecase.state.general_message.should eq "dashboard.quit.quitting"
   end
 
+  it "更新の排他を取れず終えられなければ知らせる" do
+    usecase, _, _, _ = build
+    usecase.quit = -> { false }
+    usecase.state.snapshot = snapshot
+    usecase.act("quit")
+    usecase.act("quit")
+    usecase.state.general_message.should eq "dashboard.quit.busy"
+    usecase.state.general_tone.should eq Dashboard::Tone::Warn
+  end
+
   it "終了の確かめ待ちは時間が経つと解ける" do
     usecase, _, _, _ = build
     quits = 0
-    usecase.quit = -> { quits += 1; nil }
+    usecase.quit = -> { quits += 1; true }
     usecase.state.snapshot = snapshot
     now = Time.instant
     usecase.act("quit", now)
@@ -266,7 +276,7 @@ describe Dashboard::Usecase do
   it "更新が走っている間は終了を受け付けない" do
     usecase, _, _, _ = build
     quits = 0
-    usecase.quit = -> { quits += 1; nil }
+    usecase.quit = -> { quits += 1; true }
     usecase.state.snapshot = snapshot(update: update_status(phase: "restarting"))
     usecase.act("quit")
     usecase.act("quit")

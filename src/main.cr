@@ -187,6 +187,8 @@ module KxFrameControllerManager
       # シグナルのハンドラは別のファイバで走る。主ループはこの印を見て動く。
       @stop_requested = false
       @reload_requested = false
+      # 設定画面から終えるときに取った更新の排他。終わるまで手放さない。
+      @quit_lock = nil.as(Update::FileStateStore?)
       # 27062 の疎通を確かめた接続の番号。つながるたびに 1 回だけ確かめる（仕様書 4.2 節）。
       @probed_generation = nil.as(Int32?)
       # 言語を決め直した接続の番号。Steam の表示言語は SteamVR を起動し直さないと変わらないため、つながるたびに見る。
@@ -279,7 +281,20 @@ module KxFrameControllerManager
       end
       # 終了コード 0 で終える。ユニットは Restart=on-failure なので、systemd は起動し直さない。
       # systemctl stop を呼ばないのは、ユニットを経ずに `run` を起動した場合にも同じように終えるためである。
-      dashboard.quit = -> { @stop_requested = true; nil }
+      #
+      # 更新の排他を取れたときだけ終える。取れなければ更新が走っており、置き換えた版の起動を確かめている最中に
+      # 止めると、更新は起動しなかったものと取り違えて元の版へ戻し、常駐を起動し直してしまう。
+      # 排他はプロセスが終わるまで持ち、終える途中で更新が始まらないようにする（flock はプロセスの終了で外れる）。
+      dashboard.quit = -> do
+        state = Update::FileStateStore.new(Runtime::Paths.update_state_path, Runtime::Paths.running_marker_path, Runtime::Paths.update_lock_path)
+        if state.try_lock
+          @quit_lock = state
+          @stop_requested = true
+          true
+        else
+          false
+        end
+      end
       dashboard.canvas_factory = ->(width : Int32, height : Int32) { Dashboard::CairoCanvas.create(width, height).as(Dashboard::Canvas?) }
       dashboard
     end

@@ -198,6 +198,7 @@
   "dashboard.quit": "KxFCM beenden",
   "dashboard.quit.confirm": "Erneut drücken zum Beenden",
   "dashboard.quit.quitting": "Wird beendet",
+  "dashboard.quit.busy": "Ein Update läuft, daher kann jetzt nicht beendet werden. Nach dem Update erneut versuchen",
   "dashboard.quit.note": "Beim Beenden verschwindet auch dieser Tab. Er kommt beim nächsten Start von Frame (bei aktivem Autostart) oder mit dem Befehl start zurück",
   "steamvr.description": "Schaltet Steam-Frame-Controller durch langes Drücken aus.",
   "steamvr.action_set": "KxFrameControllerManager",

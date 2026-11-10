@@ -198,6 +198,7 @@
   "dashboard.quit": "Quit KxFCM",
   "dashboard.quit.confirm": "Press again to quit",
   "dashboard.quit.quitting": "Quitting",
+  "dashboard.quit.busy": "An update is running, so the tool cannot quit now. Try again after the update finishes",
   "dashboard.quit.note": "Quitting also removes this tab. It comes back the next time Frame starts (if autostart is on) or when you run the start command",
   "steamvr.description": "Turns off Steam Frame controllers with a long press.",
   "steamvr.action_set": "KxFrameControllerManager",

@@ -198,6 +198,7 @@
   "dashboard.quit": "退出 KxFCM",
   "dashboard.quit.confirm": "再按一次退出",
   "dashboard.quit.quitting": "正在退出",
+  "dashboard.quit.busy": "正在更新，暂时无法退出。请在更新完成后再试",
   "dashboard.quit.note": "退出后此标签页也会消失。下次启动 Frame 时（若启用了自动启动）或运行 start 命令即可恢复",
   "steamvr.description": "长按即可关闭 Steam Frame 的控制器。",
   "steamvr.action_set": "KxFrameControllerManager",

@@ -198,6 +198,7 @@
   "dashboard.quit": "KxFCM を終了",
   "dashboard.quit.confirm": "もう一度押すと終了",
   "dashboard.quit.quitting": "終了します",
+  "dashboard.quit.busy": "更新が走っているため終了できません。更新が終わってからもう一度押してください",
   "dashboard.quit.note": "終了するとこのタブも消えます。次に Frame を起動したとき（自動起動が有効な場合）か、start コマンドで再開します",
   "steamvr.description": "長押しで Steam Frame のコントローラーを切断します。",
   "steamvr.action_set": "KxFrameControllerManager",

@@ -198,6 +198,7 @@
   "dashboard.quit": "Salir de KxFCM",
   "dashboard.quit.confirm": "Pulse de nuevo para salir",
   "dashboard.quit.quitting": "Saliendo",
+  "dashboard.quit.busy": "Hay una actualización en curso, así que no se puede salir ahora. Inténtelo de nuevo cuando termine",
   "dashboard.quit.note": "Al salir también desaparece esta pestaña. Vuelve la próxima vez que inicie Frame (si el inicio automático está activado) o con el comando start",
   "steamvr.description": "Apaga los mandos de Steam Frame con una pulsación larga.",
   "steamvr.action_set": "KxFrameControllerManager",

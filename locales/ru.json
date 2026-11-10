@@ -198,6 +198,7 @@
   "dashboard.quit": "Выйти из KxFCM",
   "dashboard.quit.confirm": "Нажмите ещё раз для выхода",
   "dashboard.quit.quitting": "Завершение",
+  "dashboard.quit.busy": "Идёт обновление, поэтому выйти сейчас нельзя. Повторите после завершения обновления",
   "dashboard.quit.note": "При выходе эта вкладка тоже исчезнет. Она вернётся при следующем запуске Frame (если включён автозапуск) или по команде start",
   "steamvr.description": "Выключает контроллеры Steam Frame долгим нажатием.",
   "steamvr.action_set": "KxFrameControllerManager",

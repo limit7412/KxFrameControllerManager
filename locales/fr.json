@@ -198,6 +198,7 @@
   "dashboard.quit": "Quitter KxFCM",
   "dashboard.quit.confirm": "Appuyez à nouveau pour quitter",
   "dashboard.quit.quitting": "Fermeture",
+  "dashboard.quit.busy": "Une mise à jour est en cours, impossible de quitter maintenant. Réessayez une fois la mise à jour terminée",
   "dashboard.quit.note": "Quitter fait aussi disparaître cet onglet. Il revient au prochain démarrage de Frame (si le démarrage automatique est activé) ou avec la commande start",
   "steamvr.description": "Éteint les manettes Steam Frame par un appui long.",
   "steamvr.action_set": "KxFrameControllerManager",
