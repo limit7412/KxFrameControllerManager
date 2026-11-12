@@ -14,7 +14,7 @@ inputs:
   crystal:
     description: 使う Crystal の版。
     required: false
-    default: "1.19.1"
+    default: "1.21.0"
 
 # ビルドの手順そのものは scripts/build.sh が、検査は scripts/verify.sh が持つ。
 # ここが持つのは、Crystal と静的ライブラリを用意すること、それらを呼ぶことだけである。
