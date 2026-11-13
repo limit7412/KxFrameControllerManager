@@ -2,7 +2,7 @@
 
 ## 必要なもの
 
-- Crystal 1.19.1（aarch64 のビルドには aarch64 Linux 版）
+- Crystal 1.21.0（aarch64 のビルドには aarch64 Linux 版）
 - 静的ライブラリ：`libz.a`、`libssl.a`、`libcrypto.a`、`libpcre2-8.a`
   - Ubuntu なら `sudo apt-get install zlib1g-dev libssl-dev libpcre2-dev`
 

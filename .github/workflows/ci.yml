@@ -103,7 +103,7 @@ jobs:
 
       - uses: crystal-lang/install-crystal@v1.9.5
         with:
-          crystal: 1.19.1
+          crystal: 1.21.0
 
       - name: 書式を確かめる
         run: crystal tool format --check src spec scripts
