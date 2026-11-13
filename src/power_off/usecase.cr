@@ -10,6 +10,10 @@ module PowerOff
   # 主ループからは tick を 1 拍ごとに呼ぶ。切断を決めたら別のファイバで要求を送り、
   # 主ループは止めない。切断の確認は、OpenVR の VREvent_TrackedDeviceDeactivated か、
   # 27062 の一覧の接続中から対象が消えたことで行う。
+  #
+  # 切断の処理中に別の手の長押しが成立したら、捨てずに保留し、前の処理に続けて切る。
+  # 左右を同時に長押しすると、同じ拍で左右の長押しが成立する。
+  # 後から成立した側を捨てると、片方しか切れない。
   class Usecase
     Log = ::Log.for("power_off")
 
@@ -25,8 +29,10 @@ module PowerOff
     # 振動が終わる前に切ると、2 回目が出ないまま切れる。spec では 0 にする。
     property haptic_lead : Time::Span = 300.milliseconds
 
-    # 切断の処理が走っているか。走っている間は次の切断を始めない（仕様書 2 章の「間隔を設ける」）。
-    getter? busy : Bool = false
+    # 切断の処理が走っているか。長押しの切断を処理している間と、設定画面からの切断の間に真になる。
+    def busy? : Bool
+      @draining || @manual
+    end
 
     def initialize(
       @input : InputRepository,
@@ -41,6 +47,17 @@ module PowerOff
         Hand::Right => HoldDetector.new,
       }
       @deactivated = Set(UInt32).new
+      # 長押しが成立し、まだ切り始めていない手。要求を送ってよくなる時刻を添える。
+      @pending = [] of {Hand, Time::Instant}
+      # 長押しの切断で、いま切っている手。
+      @active = [] of Hand
+      # 保留を処理するファイバが走っているか。
+      @draining = false
+      # 設定画面からの切断が走っているか。
+      @manual = false
+      # 27062 へ送る切断を 1 件ずつに絞る。確認が済んでから次を送ることで、
+      # Steam UI が使うサーバーへ要求を重ねない（仕様書 2 章の「間隔を設ける」）。
+      @lock = Mutex.new
       apply(@config, @feedback)
     end
 
@@ -129,44 +146,68 @@ module PowerOff
 
     # 長押しを経ずに手を指定して切る。設定画面の切断ボタンから呼ぶ。
     #
-    # 長押しによる切断と同じく、処理中なら新しく始めずに nil を返す。
+    # 処理中なら新しく始めずに nil を返す。長押しと違って保留しないのは、
+    # 画面に結果を返す相手がいて、受け付けなかったことをその場で知らせられるためである。
     # 対象が決まらなければ空の配列を返す。終わるまで呼び出したファイバを止める。
     def manual(hands : Array(Hand)) : Array(Result)?
-      if @busy
+      if busy?
         Log.info { "前の切断を処理中のため #{hands.map(&.label).join(" と ")} の切断を受け付けない" }
         return nil
       end
 
-      @busy = true
+      @manual = true
       begin
         Log.info { "設定画面から #{hands.map(&.label).join(" と ")} の切断を受けた" }
-        execute(resolve(hands))
+        @lock.synchronize { execute(resolve(hands)) }
       ensure
-        @busy = false
+        @manual = false
       end
     end
 
+    # 長押しが成立した手を保留に積み、処理するファイバが走っていなければ起こす。
     private def fire(hand : Hand) : Nil
-      if @busy
-        Log.info { "#{hand.label}: 前の切断を処理中のため今回は切らない" }
+      wanted = @config.target.both? ? [hand, hand.other] : [hand]
+      # target が both のときは、左右の長押しがどちらも左右を対象にする。重ねて積まない。
+      hands = wanted.reject { |candidate| @active.includes?(candidate) || @pending.any? { |entry| entry[0] == candidate } }
+      if hands.empty?
+        Log.info { "#{hand.label}: #{wanted.map(&.label).join(" と ")} はすでに切断の対象のため重ねて切らない" }
         return
       end
-
-      hands = @config.target.both? ? [hand, hand.other] : [hand]
       Log.info { "#{hand.label}: 長押しを検出したため #{hands.map(&.label).join(" と ")} を切断する" }
 
-      @busy = true
       pulse(hand, 0.0, FIRE_PULSE_S)
       pulse(hand, FIRE_PULSE_INTERVAL_S, FIRE_PULSE_S)
+      ready_at = Time.instant + @haptic_lead
+      hands.each { |target| @pending << {target, ready_at} }
+
+      return if @draining
+      @draining = true
       spawn(name: "power_off") do
         begin
-          sleep @haptic_lead
-          execute(resolve(hands))
+          drain
         rescue exception
           Log.error(exception: exception) { "切断の処理に失敗した" }
         ensure
-          @busy = false
+          @pending.clear
+          @active.clear
+          @draining = false
         end
+      end
+    end
+
+    # 保留が無くなるまで切る。切っている間に積まれた手も、続けて切る。
+    private def drain : Nil
+      until @pending.empty?
+        # 振動が終わるのを待つ。眠っている間に積まれた手があれば、その手の振動も待つ。
+        while (wait = @pending.max_of { |entry| entry[1] } - Time.instant) > Time::Span.zero
+          sleep wait
+        end
+
+        # 同じ拍で成立した左右は、27062 の一覧を 1 回引いてまとめて対象を決める。
+        @active = @pending.map { |entry| entry[0] }
+        @pending.clear
+        @lock.synchronize { execute(resolve(@active)) }
+        @active.clear
       end
     end
 

@@ -60,6 +60,62 @@ describe PowerOff::Usecase do
       link.sent.should eq ["bbbbbbbbbbbb", "aaaaaaaaaaaa"]
     end
 
+    it "左右を同じ拍で長押しし終えたら、両方を切り、両方に切断前の振動を出す" do
+      usecase, input, haptics, _, link = build
+      base = Time.instant
+      input.pressed[PowerOff::Hand::Left] = true
+      input.pressed[PowerOff::Hand::Right] = true
+      usecase.tick(base)
+      usecase.tick(base + 1000.milliseconds)
+      usecase.tick(base + 2000.milliseconds)
+      wait_idle(usecase)
+
+      link.sent.should eq ["aaaaaaaaaaaa", "bbbbbbbbbbbb"]
+      haptics.pulses.count { |pulse| pulse[0].left? }.should eq 3
+      haptics.pulses.count { |pulse| pulse[0].right? }.should eq 3
+    end
+
+    it "片方を処理している間にもう片方を長押しし終えたら、続けて切る" do
+      usecase, input, haptics, _, link = build
+      link.ignore_disconnect = true
+      hold(usecase, input, PowerOff::Hand::Left)
+      sleep 1.millisecond
+      link.sent.should eq ["aaaaaaaaaaaa"]
+
+      hold(usecase, input, PowerOff::Hand::Right)
+      wait_idle(usecase)
+
+      link.sent.uniq.should eq ["aaaaaaaaaaaa", "bbbbbbbbbbbb"]
+      haptics.pulses.count { |pulse| pulse[0].right? }.should eq 3
+    end
+
+    it "target が both で左右を同じ拍で長押しし終えても、1 台を重ねて切らない" do
+      usecase, input, _, _, link = build(Config::PowerOffTarget::Both)
+      base = Time.instant
+      input.pressed[PowerOff::Hand::Left] = true
+      input.pressed[PowerOff::Hand::Right] = true
+      usecase.tick(base)
+      usecase.tick(base + 1000.milliseconds)
+      usecase.tick(base + 2000.milliseconds)
+      wait_idle(usecase)
+
+      link.sent.should eq ["aaaaaaaaaaaa", "bbbbbbbbbbbb"]
+    end
+
+    it "切断前の振動が終わるまで、後から長押しし終えた側の要求を送らない" do
+      usecase, input, _, _, link = build
+      usecase.haptic_lead = 150.milliseconds
+      hold(usecase, input, PowerOff::Hand::Left)
+      sleep 100.milliseconds
+      hold(usecase, input, PowerOff::Hand::Right)
+      sleep 100.milliseconds
+      # 左の振動は終わっているが、右の振動はまだ終わっていない。
+      link.sent.should be_empty
+
+      wait_idle(usecase)
+      link.sent.should eq ["aaaaaaaaaaaa", "bbbbbbbbbbbb"]
+    end
+
     it "無効にしていれば切らない" do
       usecase, input, _, _, link = build
       config = Config::PowerOffSection.new
@@ -221,6 +277,22 @@ describe PowerOff::Usecase do
       usecase.manual([PowerOff::Hand::Right]).should be_nil
       wait_idle(usecase)
       link.sent.uniq.should eq ["aaaaaaaaaaaa"]
+    end
+
+    it "設定画面からの切断を処理中に長押しし終えたら、その後に続けて切る" do
+      usecase, input, _, _, link = build
+      link.ignore_disconnect = true
+      spawn { usecase.manual([PowerOff::Hand::Left]) }
+      sleep 1.millisecond
+      usecase.busy?.should be_true
+
+      hold(usecase, input, PowerOff::Hand::Right)
+      sleep 1.millisecond
+      # 設定画面からの切断が終わるまでは、右の要求を送らない。
+      link.sent.should eq ["aaaaaaaaaaaa"]
+
+      wait_idle(usecase)
+      link.sent.should eq ["aaaaaaaaaaaa", "aaaaaaaaaaaa", "bbbbbbbbbbbb", "bbbbbbbbbbbb"]
     end
 
     it "対象が決まらなければ空の配列を返す" do
