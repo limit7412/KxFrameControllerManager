@@ -99,6 +99,7 @@ module Config
     # libopenvr_api.so の場所。空なら既定の場所を探す。
     property openvr_library_path : String = ""
     # SteamVR が動いていない間に初期化をやり直す間隔。
+    # つながった後にアクションを読ませられなかったときの、やり直しの間隔にも使う。
     property retry_interval_s : Int32 = 10
 
     def initialize

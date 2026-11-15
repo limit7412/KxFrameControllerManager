@@ -138,7 +138,7 @@ Steam ボタンはアプリから読めない見込みのため、トリガー�
 | キー | 既定 | 範囲 | 意味 |
 | --- | --- | --- | --- |
 | `openvr_library_path` | `""` | | `libopenvr_api.so` の場所。空なら既定の場所を探す |
-| `retry_interval_s` | `10` | 1 から 600 | SteamVR が動いていない間に、つなぎ直す間隔 |
+| `retry_interval_s` | `10` | 1 から 600 | SteamVR が動いていない間に、つなぎ直す間隔。つながった後に SteamVR Input のアクションを読ませられなかったときも、この間隔でやり直す |
 
 `openvr_library_path` が空のときは、次の順に探す。
 

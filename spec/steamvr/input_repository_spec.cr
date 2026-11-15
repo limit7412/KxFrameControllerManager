@@ -19,12 +19,57 @@ describe SteamVR::InputActions do
     repository.manifest_paths.size.should eq 2
   end
 
-  it "読ませられなければ同じ接続ではやり直さない" do
+  it "読ませられなければ、間隔が過ぎるまで同じ接続ではやり直さない" do
     repository, actions = build
+    actions.retry_interval = 10.seconds
     repository.fail_manifest_path = true
-    actions.prepare.should be_false
-    actions.prepare.should be_false
+    now = Time.instant
+    actions.prepare(now).should be_false
+    actions.prepare(now + 20.milliseconds).should be_false
+    actions.prepare(now + 9.seconds).should be_false
     repository.manifest_paths.size.should eq 1
+  end
+
+  it "間隔が過ぎたら同じ接続でやり直し、読ませられたら入力を読める" do
+    repository, actions = build
+    actions.retry_interval = 10.seconds
+    repository.fail_manifest_path = true
+    now = Time.instant
+    actions.prepare(now).should be_false
+
+    repository.fail_manifest_path = false
+    actions.prepare(now + 10.seconds).should be_true
+    repository.manifest_paths.size.should eq 2
+    actions.power_off.should eq 2_u64
+    actions.source(PowerOff::Hand::Left).should eq 10_u64
+
+    actions.prepare(now + 30.seconds).should be_true
+    repository.manifest_paths.size.should eq 2
+  end
+
+  it "失敗が続く間は、間隔ごとに 1 回ずつやり直す" do
+    repository, actions = build
+    actions.retry_interval = 10.seconds
+    repository.fail_manifest_path = true
+    now = Time.instant
+    actions.prepare(now).should be_false
+    actions.prepare(now + 10.seconds).should be_false
+    actions.prepare(now + 15.seconds).should be_false
+    actions.prepare(now + 20.seconds).should be_false
+    repository.manifest_paths.size.should eq 3
+  end
+
+  it "失敗した後につなぎ直したら、間隔を待たずに読ませる" do
+    repository, actions = build
+    actions.retry_interval = 10.seconds
+    repository.fail_manifest_path = true
+    now = Time.instant
+    actions.prepare(now).should be_false
+
+    repository.fail_manifest_path = false
+    repository.generation += 1
+    actions.prepare(now + 20.milliseconds).should be_true
+    repository.manifest_paths.size.should eq 2
   end
 
   it "overlay_global を k_nActionSetOverlayGlobalPriorityMin に直す" do
