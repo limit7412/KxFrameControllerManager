@@ -28,7 +28,8 @@ CLI は設定ファイルを書き出さず、無いときや不正なときは�
     "delay_s": 10,
     "brightness": false,
     "brightness_gain": null,
-    "performance_profile": true
+    "performance_profile": true,
+    "fade_ms": 2000
   },
   "input": {
     "priority": "normal",
@@ -95,12 +96,22 @@ CLI は設定ファイルを書き出さず、無いときや不正なときは�
 | `brightness` | `false` | | 明るさ（`steamvr/analogGain`）を下げるか |
 | `brightness_gain` | `null` | null か正の数 | 省電力中の明るさ。null なら HMD の最小値を使う。数値は HMD の範囲へ収めて使う |
 | `performance_profile` | `true` | | 描画のプロファイル（`steamvr/performanceProfile`）を省電力のものへ切り替えるか |
+| `fade_ms` | `2000` | 0 から 10000 | 明るさを下げるのにかけるミリ秒。0 なら 1 回で切り替える |
 
 省電力へ入る条件は、OpenVR で左右のどちらもつながっていない状態が `delay_s` 秒続くことである。
 入る直前に 27062 の一覧を取り、接続中のものがあれば入らずに待ち直す。一覧を取れなければ OpenVR の判定だけで入る。
 
 描画のプロファイルは、`steamvr/powersaveSteamOSManagerCustomProfile` に入っている名前へ切り替える。
 明るさは、既に省電力の値より暗ければ変えない。
+
+明るさは 1 回で書くと一瞬で変わるため、`fade_ms` をかけて 100 ミリ秒ごとに少しずつ下げる。
+戻すときは、`fade_ms` と 500 ミリ秒の小さいほうをかけて上げる。コントローラーをつないだ人を暗い画面の前で待たせないためである。
+元の明るさが未設定で読めないときは、今の明るさが分からないので 1 回で切り替える。
+
+描画のプロファイルは、切り替えた直後に 0.5 秒ほど画面が暗転する。
+明るさも下げる設定なら、入るときは明るさを下げきってから切り替え、戻るときは先に切り替えて 0.5 秒待ってから明るさを上げる。
+暗転は無くならないが、暗い画面の上で起きるので目立たない。
+明るさを下げない設定では、描画のプロファイルを 1 回で切り替えるので、暗転がそのまま見える。
 
 変える前の値は `~/.local/state/KxFrameControllerManager/power_save.json` に書いてから変える。
 どちらかのコントローラーがつながったとき、省電力を無効にしたとき、常駐を止めたとき、SteamVR が終了するときに、このファイルの値へ戻して消す。
@@ -144,7 +155,7 @@ Steam ボタンはアプリから読めない見込みのため、トリガー�
 | キー | 既定 | 範囲 | 意味 |
 | --- | --- | --- | --- |
 | `openvr_library_path` | `""` | | `libopenvr_api.so` の場所。空なら既定の場所を探す |
-| `retry_interval_s` | `10` | 1 から 600 | SteamVR が動いていない間に、つなぎ直す間隔 |
+| `retry_interval_s` | `10` | 1 から 600 | SteamVR が動いていない間に、つなぎ直す間隔。つながった後に SteamVR Input のアクションを読ませられなかったときも、この間隔でやり直す |
 
 `openvr_library_path` が空のときは、次の順に探す。
 

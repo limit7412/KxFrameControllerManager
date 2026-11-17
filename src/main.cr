@@ -129,6 +129,7 @@ module KxFrameControllerManager
     def apply(root : Config::Root) : Nil
       @openvr.library_path = root.steamvr.openvr_library_path
       @actions.priority = root.input.priority
+      @actions.retry_interval = root.steamvr.retry_interval_s.seconds
       @link.port = root.frame_link.port
       @power_off.apply(root.power_off, root.feedback)
       @power_save.apply(root.power_save)

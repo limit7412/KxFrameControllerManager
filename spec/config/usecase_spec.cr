@@ -161,6 +161,16 @@ describe Config::Usecase do
         messages(usecase, %({"power_save": {"delay_s": 0}})).should be_empty
       end
 
+      it "fade_ms は 0 から 10000 にする" do
+        usecase, _ = usecase_with
+        messages(usecase, %({"power_save": {"fade_ms": 0}})).should be_empty
+        messages(usecase, %({"power_save": {"fade_ms": 10000}})).should be_empty
+        messages(usecase, %({"power_save": {"fade_ms": -1}}))
+          .should contain "power_save: fade_ms は 0 から 10000 の範囲で指定してください"
+        messages(usecase, %({"power_save": {"fade_ms": 10001}}))
+          .should contain "power_save: fade_ms は 0 から 10000 の範囲で指定してください"
+      end
+
       it "brightness_gain は null か正の値にする" do
         usecase, _ = usecase_with
         messages(usecase, %({"power_save": {"brightness_gain": null}})).should be_empty

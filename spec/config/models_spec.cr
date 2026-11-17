@@ -16,6 +16,7 @@ describe Config::Root do
     root.power_save.brightness.should be_false
     root.power_save.delay_s.should eq 10
     root.power_save.brightness_gain.should be_nil
+    root.power_save.fade_ms.should eq 2000
     root.input.priority.should eq Config::InputPriority::Normal
     root.input.poll_interval_ms.should eq 20
     root.feedback.haptics.should be_true

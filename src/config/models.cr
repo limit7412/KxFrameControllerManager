@@ -59,6 +59,9 @@ module Config
     property brightness_gain : Float64? = nil
     # 描画のプロファイルを省電力のものへ切り替えるか。
     property performance_profile : Bool = true
+    # 明るさを下げるのにかける時間（ミリ秒）。0 なら 1 回で切り替える。
+    # 戻すときは、これと 500 の小さいほうをかける。
+    property fade_ms : Int32 = 2000
 
     def initialize
     end
@@ -99,6 +102,7 @@ module Config
     # libopenvr_api.so の場所。空なら既定の場所を探す。
     property openvr_library_path : String = ""
     # SteamVR が動いていない間に初期化をやり直す間隔。
+    # つながった後にアクションを読ませられなかったときの、やり直しの間隔にも使う。
     property retry_interval_s : Int32 = 10
 
     def initialize

@@ -114,6 +114,8 @@ KxNotifyUtils にあったトレイと libui-ng のステップは無い。
 
 1 拍で何を呼ぶかは `Runtime::Scheduler` が決める。
 SteamVR が動いていない間は `steamvr.retry_interval_s` ごとに接続を試し、つながったら vrmanifest を登録する。
+つながった後の `SetActionManifestPath` が失敗したときも、接続を保ったまま同じ間隔で呼び直す。
+SteamVR の起動直後は vrserver の応答が遅く、この呼び出しが IPC の待ち時間切れで失敗することがあるためである。
 `VREvent_Quit` を受けたら応答してから OpenVR を閉じ、1 間隔の後に再試行へ戻る。
 KxNotifyUtils と違い、SteamVR の終了でプロセスは終わらない（仕様書 3.6 節）。
 
