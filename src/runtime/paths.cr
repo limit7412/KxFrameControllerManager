@@ -50,6 +50,11 @@ module Runtime
       File.join(state_directory, "power_save.json")
     end
 
+    # 常駐が長押しを検出できる状態かの記録。`status` コマンドが読む。
+    def self.detection_state_path : String
+      File.join(state_directory, "detection.json")
+    end
+
     # 自動更新の状態（最後に確かめた時刻、戻した版）。
     def self.update_state_path : String
       File.join(state_directory, "update.json")

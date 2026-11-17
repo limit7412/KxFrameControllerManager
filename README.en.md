@@ -155,6 +155,7 @@ Start by running `status` to see where things stop.
 
 - **`SteamVR: not connected`**: check that SteamVR is running. If it is, see "うまく動かないとき" (troubleshooting) in the [setup guide](docs/setup.md#うまく動かないとき) (Japanese)
 - **`27062: not reachable`** (shown as "Disconnect: unavailable" on the settings screen): the mechanism inside SteamVR that disconnects controllers is not responding. Restart SteamVR and try again. A SteamVR update may also have broken it
+- **`Long-press detection: not working`**: the tool cannot read the button input. The reason is shown in parentheses. Right after SteamVR starts, wait about 10 seconds and run `status` again. If it continues, see "うまく動かないとき" (troubleshooting) in the [setup guide](docs/setup.md#うまく動かないとき) (Japanese)
 - **The serials do not match**: for safety, that hand is never disconnected by a long press. Reconnect the controller and run `status` again
 - **The long press does nothing only while in a game**: the game may be taking the input. Set "Input priority" to "Highest" in the "Long press" tab and enable "Experimental overlay input overrides" in SteamVR. The assigned button then no longer works inside the game
 - **The "KxFCM" tab does not appear**: check that the tool is running with `systemctl --user status kx-frame-controller-manager`. If it is not, start it with `~/.local/bin/kx-frame-controller-manager start`

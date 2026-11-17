@@ -78,8 +78,12 @@ SteamVR を動かし、左右のコントローラーをつないだ状態で `s
 ~/.local/bin/kx-frame-controller-manager status
 ```
 
-`SteamVR: つながりました`、`27062: 届きました`、左右それぞれの `シリアルが一致しました` が出れば、長押しで切断できる。
+`SteamVR: つながりました`、`27062: 届きました`、左右それぞれの `シリアルが一致しました`、`長押しの検出: できます` が出れば、長押しで切断できる。
 一致しない手は、安全のため長押ししても切らない。
+
+`長押しの検出` の行だけは、`status` が自分で調べた結果ではなく、常駐が残した記録である。
+`status` は常駐とは別に SteamVR へつなぐため、常駐がボタンの入力を読める状態かどうかは、常駐に書かせないと分からない。
+`できません` と出たときの見方は[うまく動かないとき](#うまく動かないとき)にある。
 
 長押しを経ずに切断して確かめることもできる。
 
@@ -142,6 +146,7 @@ SteamVR そのものは再起動しない。
 | vrmanifest とアクションマニフェスト | `~/.local/share/KxFrameControllerManager/` |
 | ログ | `~/.local/state/KxFrameControllerManager/logs/` |
 | 省電力で変える前の値 | `~/.local/state/KxFrameControllerManager/power_save.json` |
+| 長押しを検出できる状態かの記録 | `~/.local/state/KxFrameControllerManager/detection.json` |
 | systemd のユニット | `~/.config/systemd/user/kx-frame-controller-manager.service` |
 | 「プログラムを起動」の項目 | `~/.local/share/applications/kx-frame-controller-manager.desktop` |
 
@@ -234,6 +239,16 @@ SteamVR の更新でプロトコルが変わった可能性もある。`log_leve
 ```json
 { "log_level": "debug" }
 ```
+
+`長押しの検出: できません` と出るときは、括弧の中の理由で分かれる。
+
+- **常駐が動いていません**：`start` で起動する。常駐が落ちたときもこの表示になる
+- **常駐が SteamVR へつながっていません**：SteamVR が動いていれば、常駐は `steamvr.retry_interval_s`（既定 10 秒）ごとに接続をやり直す。少し待ってからもう一度 `status` を見る
+- **SteamVR Input のアクションを読ませられずにやり直しています**：SteamVR の起動直後は応答が遅く、読ませるのに失敗することがある。常駐は同じ間隔でやり直すので、多くは待てば `できます` に変わる。表示された時刻から長く続いているなら、ログで `SetActionManifestPath` の失敗を確かめる
+- **この SteamVR では SteamVR Input を使えません**：SteamVR の版が、本ツールの使うインターフェースに合っていない。待っても直らない
+
+読ませられない場合と使えない場合は、`status` の終了コードが 1 になる。
+常駐を止めてある場合や、設定で長押しを無効にしてある場合は、利用者が選んだ状態なので 1 にしない。
 
 ゲーム中に長押しが効かないときは、ゲームが入力を取っている可能性がある。
 設定の `input.priority` を `overlay_global` にし、SteamVR の「Experimental overlay input overrides」を有効にする。

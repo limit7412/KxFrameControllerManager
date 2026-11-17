@@ -67,6 +67,17 @@ module SteamVR
       end
     end
 
+    # 今の接続でアクションを読ませられたか。常駐が `status` コマンドへ知らせるのに使う。
+    # ここでは読ませない。読ませるのは prepare である。
+    def state : PowerOff::Detection
+      return PowerOff::Detection::NotConnected unless @repository.opened?
+      return PowerOff::Detection::Unavailable unless @repository.input_available?
+      generation = @repository.generation
+      return PowerOff::Detection::Ready if @prepared_generation == generation
+      return PowerOff::Detection::Failed if @failed_generation == generation
+      PowerOff::Detection::Pending
+    end
+
     def source(hand : PowerOff::Hand) : UInt64
       @sources[hand]? || 0_u64
     end

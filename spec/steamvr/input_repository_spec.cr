@@ -47,6 +47,46 @@ describe SteamVR::InputActions do
     repository.manifest_paths.size.should eq 2
   end
 
+  it "つながっていない間と、読ませる前の状態を見分ける" do
+    repository, actions = build
+    actions.state.should eq PowerOff::Detection::Pending
+    repository.manifest_paths.should be_empty
+
+    repository.opened = false
+    actions.state.should eq PowerOff::Detection::NotConnected
+  end
+
+  it "読ませられたか、失敗してやり直しているかを状態で見せる" do
+    repository, actions = build
+    actions.retry_interval = 10.seconds
+    repository.fail_manifest_path = true
+    now = Time.instant
+    actions.prepare(now)
+    actions.state.should eq PowerOff::Detection::Failed
+    actions.prepare(now + 5.seconds)
+    actions.state.should eq PowerOff::Detection::Failed
+
+    repository.fail_manifest_path = false
+    actions.prepare(now + 10.seconds)
+    actions.state.should eq PowerOff::Detection::Ready
+  end
+
+  it "つなぎ直した後は、読ませ直すまで読ませた状態にしない" do
+    repository, actions = build
+    actions.prepare
+    actions.state.should eq PowerOff::Detection::Ready
+
+    repository.generation += 1
+    actions.state.should eq PowerOff::Detection::Pending
+  end
+
+  it "SteamVR Input を使えなければ、その状態を見せる" do
+    repository, actions = build
+    repository.input_available = false
+    actions.prepare.should be_false
+    actions.state.should eq PowerOff::Detection::Unavailable
+  end
+
   it "失敗が続く間は、間隔ごとに 1 回ずつやり直す" do
     repository, actions = build
     actions.retry_interval = 10.seconds

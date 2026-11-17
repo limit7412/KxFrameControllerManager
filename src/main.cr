@@ -5,6 +5,7 @@ require "./config/repository"
 require "./config/usecase"
 require "./error/usecase"
 require "./frame_link/websocket_repository"
+require "./power_off/detection"
 require "./power_off/usecase"
 require "./power_save/usecase"
 require "./runtime/cli"
@@ -183,6 +184,8 @@ module KxFrameControllerManager
       # 最後に 27062 の疎通を確かめた結果と、最後に読んだ設定の誤り。設定画面へ見せる。
       @link_reachable = nil.as(Bool?)
       @config_errors = [] of Config::ValidationError
+      # 長押しを検出できる状態かの記録。`status` コマンドが読む。
+      @detection = PowerOff::DetectionRecorder.new(PowerOff::DetectionFile.new(Runtime::Paths.detection_state_path), Process.pid)
       @dashboard = build_dashboard
       wire
 
@@ -212,6 +215,7 @@ module KxFrameControllerManager
         # つなぎ直すとタブが一度消えるため、操作している最中には行わない。
         rebind if !@dashboard.visible? && @parts.take_rebind
         @scheduler.step
+        record_detection
         sleep @scheduler.poll_interval
       end
 
@@ -219,6 +223,7 @@ module KxFrameControllerManager
       # 省電力で変えた値は、OpenVR を閉じる前に戻す。
       @errors.guard("error.power_save") { @parts.power_save.shutdown }
       @parts.steamvr.disconnect
+      clear_detection
       Log.info { "終了する" }
       0
     ensure
@@ -244,6 +249,25 @@ module KxFrameControllerManager
         parts.power_off.reset
         @errors.guard("error.power_save") { parts.power_save.shutdown }
       end
+    end
+
+    # 長押しを検出できる状態かを、変わったときだけファイルへ残す。
+    #
+    # `status` は別のプロセスで動くため、常駐がアクションを読ませられたかをこのファイルで知る。
+    # 書けなくても常駐は続ける。同じ状態では書き直さないので、失敗のログは変わり目ごとに 1 行で済む。
+    private def record_detection : Nil
+      enabled = @config.current.power_off.enabled
+      @detection.record(enabled ? @parts.actions.state : PowerOff::Detection::Disabled)
+    rescue exception : File::Error
+      Log.warn(exception: exception) { "長押しの検出の状態を書き出せなかった: #{Runtime::Paths.detection_state_path}" }
+    end
+
+    # 終わるときに記録を消す。残すと、`status` が止まった常駐の状態を読んでしまう。
+    # 消せずに残っても、`status` は書いたプロセスが動いていなければ信じない。
+    private def clear_detection : Nil
+      @detection.clear
+    rescue exception : File::Error
+      Log.warn(exception: exception) { "長押しの検出の状態を消せなかった: #{Runtime::Paths.detection_state_path}" }
     end
 
     # 既定バインドを書き換えたあと、SteamVR へつなぎ直して読ませる。
@@ -483,7 +507,7 @@ module KxFrameControllerManager
       Runtime::I18n.t(key, vars)
     end
 
-    # SteamVR と 27062 の疎通、左右のシリアルと照合の結果を表示する。
+    # SteamVR と 27062 の疎通、左右のシリアルと照合の結果、常駐が長押しを検出できる状態かを表示する。
     def status : Int32
       with_parts do |parts|
         if parts.steamvr.connected?
@@ -511,10 +535,28 @@ module KxFrameControllerManager
           puts t("status.link_ng")
         end
 
+        detectable = print_detection
         puts t("status.power_save_pending") if File.exists?(Runtime::Paths.power_save_state_path)
         puts t("status.dashboard") if @root.dashboard.enabled
-        list ? 0 : 1
+        list && detectable ? 0 : 1
       end
+    end
+
+    # 常駐が長押しを検出できる状態かを、常駐が残した記録から表示する。
+    #
+    # このプロセスの接続で調べても、常駐の接続でアクションを読ませられたかは分からない。
+    # 長押しが有効で SteamVR へもつながっているのに検出できないときだけ、偽を返す。
+    # 常駐を止めてある、長押しを無効にしてある、といった利用者が選んだ状態は異常として扱わない。
+    private def print_detection : Bool
+      report = PowerOff::DetectionFile.new(Runtime::Paths.detection_state_path).load
+      cmdline = report.try { |found| File.read("/proc/#{found.pid}/cmdline") rescue nil }
+      unless report && report.current?(cmdline)
+        puts t("status.detection_not_running")
+        return true
+      end
+      since = report.since.to_local.to_s("%Y-%m-%d %H:%M:%S")
+      puts t("status.detection_#{report.state.to_s.underscore}", {"since" => since})
+      !report.state.broken?
     end
 
     # 27062 から取ったコントローラーの一覧を表示する。
