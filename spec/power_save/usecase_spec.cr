@@ -352,6 +352,28 @@ describe PowerSave::Usecase do
       settings.strings["steamvr/performanceProfile"].should eq "Performance"
     end
 
+    it "下げきる最後の書き込みに失敗しても、戻す値をファイルに残す" do
+      usecase, settings, store, _ = build(fade_ms: 2000)
+      base = Time.instant
+      enter(usecase, base)
+      start = base + 10.seconds
+      usecase.tick(false, start)
+      usecase.tick(false, start + 1.second)
+      settings.unwritable << "steamvr/analogGain"
+      usecase.tick(false, start + 2.seconds)
+
+      store.saved.not_nil!.values.map(&.key).should eq ["analogGain"]
+      settings.strings["steamvr/performanceProfile"].should eq "Performance"
+
+      # 書けるようになれば、次につながったときに元の明るさへ戻る。
+      settings.unwritable.clear
+      usecase.tick(true, start + 3.seconds)
+      usecase.tick(true, start + 3.seconds)
+      usecase.tick(true, start + 5.seconds)
+      settings.floats["steamvr/analogGain"].should eq 1.3
+      store.saved.should be_nil
+    end
+
     it "元が未設定なら今の明るさが分からないため、1 回で切り替える" do
       usecase, settings, _, _ = build(fade_ms: 2000)
       settings.floats.delete("steamvr/analogGain")

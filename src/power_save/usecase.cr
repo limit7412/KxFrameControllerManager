@@ -263,7 +263,13 @@ module PowerSave
         pending = @pending
         clear_fade
         # 最後は補間の値ではなく、目標の値そのものを書く。
-        write_all([change] + pending, [] of SavedValue)
+        # 明るさは途中まで書き換えてあるので、この書き込みが失敗しても戻す対象に入れる。
+        unless change.write.call
+          Log.error { "#{change.saved.section}/#{change.saved.key} を書き換えられなかったため、書き換えた分を戻す" }
+          roll_back([change.saved])
+          return
+        end
+        write_all(pending, [change.saved])
       end
     end
 
