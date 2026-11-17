@@ -90,7 +90,7 @@ module Dashboard
 
     # 右の列の設定の並び。
     HOLD_FIELDS    = %w[power_off.enabled input.left_button input.right_button power_off.hold_ms power_off.warn_ms power_off.cooldown_ms power_off.target input.priority]
-    POWER_FIELDS   = %w[feedback.haptics feedback.amplitude power_save.enabled power_save.delay_s power_save.brightness power_save.brightness_gain power_save.performance_profile]
+    POWER_FIELDS   = %w[feedback.haptics feedback.amplitude power_save.enabled power_save.delay_s power_save.brightness power_save.brightness_gain power_save.fade_ms power_save.performance_profile]
     UPDATE_FIELDS  = %w[update.auto_update update.check_interval_h]
     GENERAL_FIELDS = %w[language]
 
@@ -184,8 +184,10 @@ module Dashboard
       link = snapshot.link_reachable
       rows << {t("dashboard.link"), t(link.nil? ? "dashboard.link_unknown" : (link ? "dashboard.link_ok" : "dashboard.link_ng")), link.nil? ? MUTED : (link ? OK : NG)}
       power_save = t("dashboard.power_save.#{snapshot.power_save_state}")
-      power_save_color = snapshot.power_save_state == "active" ? WARN : TEXT
-      if snapshot.power_save_pending && snapshot.power_save_state != "active"
+      # 戻っている途中も、設定値はまだ変わったままである。
+      in_use = {"active", "restoring"}.includes?(snapshot.power_save_state)
+      power_save_color = in_use ? WARN : TEXT
+      if snapshot.power_save_pending && !in_use
         power_save = t("dashboard.power_save.pending")
         power_save_color = WARN
       end
@@ -361,6 +363,7 @@ module Dashboard
       when "input.priority"          then t("dashboard.priority.#{root.input.priority.to_s.underscore}")
       when "feedback.amplitude"      then "%.2f" % root.feedback.amplitude
       when "power_save.delay_s"      then t("dashboard.seconds", {"value" => root.power_save.delay_s.to_s})
+      when "power_save.fade_ms"      then t("dashboard.milliseconds", {"value" => root.power_save.fade_ms.to_s})
       when "update.check_interval_h" then t("dashboard.hours", {"value" => root.update.check_interval_h.to_s})
       when "language"
         # 自動のときは、今そう決まった言語の名前を添える。今の言語の辞書は、その言語自身の名前を持つ。

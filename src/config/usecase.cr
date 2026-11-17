@@ -57,6 +57,7 @@ module Config
     COOLDOWN_MS_RANGE        = 0..60_000
     CONFIRM_TIMEOUT_MS_RANGE = 100..30_000
     DELAY_S_RANGE            = 0..600
+    FADE_MS_RANGE            = 0..10_000
     POLL_INTERVAL_MS_RANGE   = 1..100
     RETRY_INTERVAL_S_RANGE   = 1..600
     PORT_RANGE               = 1..65_535
@@ -180,6 +181,9 @@ module Config
       label = "power_save"
       unless DELAY_S_RANGE.includes?(section.delay_s)
         errors << range_error(label, "delay_s", DELAY_S_RANGE)
+      end
+      unless FADE_MS_RANGE.includes?(section.fade_ms)
+        errors << range_error(label, "fade_ms", FADE_MS_RANGE)
       end
       # 数値なら HMD の範囲へ収めて使う。ここでは収める前の値として成り立つかだけを見る。
       if (gain = section.brightness_gain) && !positive_finite?(gain)

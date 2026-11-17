@@ -298,6 +298,8 @@ module Fakes
     property range : {Float64, Float64}? = {0.4, 1.6}
     getter writes : Array(String) = [] of String
     getter removed : Array(String) = [] of String
+    # 書いた値を、書いた順に残す。フェードの途中の値を確かめるのに使う。
+    getter written : Array({String, String}) = [] of {String, String}
 
     def available? : Bool
       @available
@@ -321,6 +323,7 @@ module Fakes
       name = "#{section}/#{key}"
       return false if @unwritable.includes?(name)
       @writes << name
+      @written << {name, value.to_s}
       @floats[name] = value
       true
     end
@@ -329,6 +332,7 @@ module Fakes
       name = "#{section}/#{key}"
       return false if @unwritable.includes?(name)
       @writes << name
+      @written << {name, value}
       @strings[name] = value
       true
     end
