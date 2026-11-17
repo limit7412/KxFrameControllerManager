@@ -10,6 +10,10 @@ module PowerSave
   # 主ループからは tick を 1 拍ごとに呼び、コントローラーがつながっているかを渡す。
   # 入る直前の 27062 の一覧の確認は別のファイバで行い、主ループは止めない。
   #
+  # 省電力中は 27062 の一覧も間を空けて見に行き、接続中のものがあれば戻る。
+  # コントローラーの電源を入れても、OpenVR がつながったと報告するまで分単位で遅れることがある。
+  # 無線の接続は 27062 の一覧に先に現れるため、そちらでも戻れるようにする。
+  #
   # 変える前の値はファイルへ書いてから変える。戻すときはファイルの値を正とする。
   # 設定は SteamVR 側で永続化されるため、戻さずに落ちると次に SteamVR を使うときまで暗いままになる。
   #
@@ -74,6 +78,11 @@ module PowerSave
     # 戻すのに失敗したとき、次に試すまでの間。毎拍やり直すと、失敗のログで埋まる。
     RECOVERY_RETRY = 10.seconds
 
+    # 省電力中に 27062 の一覧を見に行く間。
+    # 一覧は要求のたびに接続を張るため、毎拍は見ない。戻るまでの遅れはこの間と応答の時間で決まる。
+    # 前の確認が終わるまで次は始めないので、27062 が応えないときも確認は重ならない。
+    LINK_POLL = 2.seconds
+
     getter state : State = State::Idle
 
     def initialize(
@@ -88,6 +97,13 @@ module PowerSave
       @cancelled = false
       # 確認のファイバの番号。shutdown の後に戻ってきた古い確認を見分けるのに使う。
       @check_id = 0
+      # 省電力中に次に一覧を見に行く時刻と、見に行っている最中かどうか。
+      @next_poll = nil.as(Time::Instant?)
+      @polling = false
+      # 省電力中の一覧に接続中のものがあったら、そのシリアルを入れる。次の拍で戻る。
+      @linked = nil.as(String?)
+      # 27062 との食い違いで入らなかったことを、既に知らせたか。同じ食い違いが続く間は繰り返さない。
+      @mismatch_reported = false
       # 進行中のフェード。Active なら下げている途中、Restoring なら上げている途中である。
       @fade = nil.as(Fade?)
       # 下げているフェードが書いている値と、下げきった後に書く残りの値。
@@ -121,6 +137,7 @@ module PowerSave
       end
 
       if any_connected
+        @mismatch_reported = false
         leave("コントローラーがつながったため") if @state.active?
         @cancelled = true if @state.checking?
         @state = State::Idle if @state.waiting?
@@ -144,7 +161,13 @@ module PowerSave
         since = @waiting_since || now
         start_check if now - since >= @config.delay_s.seconds
       in .active?
-        advance_enter(now)
+        # 明るさを下げている途中でも、27062 で接続中のものが見つかれば戻る。
+        if linked = @linked
+          leave("27062 で #{linked} が接続中のため")
+        else
+          poll_link(now)
+          advance_enter(now)
+        end
       in .checking?, .restoring?
       end
     end
@@ -180,7 +203,11 @@ module PowerSave
             @state = State::Idle
           elsif list && !list.connected.empty?
             # OpenVR と 27062 の言い分が食い違う。安全側に倒し、待ち直す。
-            Log.info { "27062 では #{list.connected.map(&.serial).join(", ")} が接続中のため省電力へ入らない" }
+            # OpenVR の報告が遅れている間は、delay_s ごとにここへ来る。知らせるのは初めの 1 回にする。
+            unless @mismatch_reported
+              Log.info { "27062 では #{serials(list)} が接続中のため省電力へ入らない" }
+              @mismatch_reported = true
+            end
             @state = State::Waiting
             @waiting_since = Time.instant
           else
@@ -194,6 +221,37 @@ module PowerSave
       end
     end
 
+    # 省電力中に 27062 の一覧を見て、接続中のものがあれば @linked に残す。
+    # 戻すのは次の拍の tick に任せる。設定値の書き換えを主ループの側に揃えるためである。
+    # 一覧を取れなかったときは何もせず、次の間でもう一度見る。
+    private def poll_link(now : Time::Instant) : Nil
+      return if @polling
+      # 入って初めの拍では見に行かない。入る直前に一覧を見たばかりである。
+      next_poll = @next_poll
+      @next_poll = now + LINK_POLL if next_poll.nil? || now >= next_poll
+      return if next_poll.nil? || now < next_poll
+
+      @polling = true
+      check_id = @check_id
+      spawn(name: "power_save") do
+        begin
+          list = @link.list
+          # 見ている間に戻った、または終了した後の結果は使わない。
+          if list && !list.connected.empty? && check_id == @check_id && @state.active?
+            @linked = serials(list)
+          end
+        rescue exception
+          Log.warn(exception: exception) { "省電力中に 27062 の一覧を確かめられなかった" }
+        ensure
+          @polling = false
+        end
+      end
+    end
+
+    private def serials(list : PowerOff::ControllerList) : String
+      list.connected.map(&.serial).join(", ")
+    end
+
     # 省電力へ入る。どの値も変えられなかった場合も Active にする。
     # 戻さずに Waiting へ返すと、delay_s ごとに同じ失敗を繰り返す。
     #
@@ -201,6 +259,9 @@ module PowerSave
     # 続きは tick が拍ごとに進め、下げきってから残りの値を書く。
     private def enter : Nil
       @state = State::Active
+      @mismatch_reported = false
+      @linked = nil
+      @next_poll = nil
       plan = build_plan
       if plan.empty?
         Log.info { "両方のコントローラーが切れているが、変える値が無い" }
@@ -395,6 +456,7 @@ module PowerSave
       entering = @fade
       fading = @fading
       clear_fade
+      @linked = nil
 
       if start_restore(entering)
         Log.info { "#{reason}省電力から戻る" }

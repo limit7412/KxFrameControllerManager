@@ -76,7 +76,7 @@ scripts/                           build.sh / verify.sh / package.sh
 依存の向きは次のとおり固定する。
 
 - `power_off` は他のどのコンテキストにも依存しない。ただし設定の型（`config/models`）だけは参照する。
-- `power_save` は `power_off` の `DisconnectRepository` を使う。入る直前に 27062 の一覧を確かめるためである。
+- `power_save` は `power_off` の `DisconnectRepository` を使う。入る直前と省電力中に 27062 の一覧を確かめるためである。
 - `steamvr` は `power_off` の `InputRepository`、`HapticRepository`、`DeviceRepository` と、`power_save` の `SettingsRepository` を、`frame_link` は `DisconnectRepository` を継承して実装する。
 - `runtime` は usecase を呼ぶだけで、ロジックを持たない。`runtime/systemd` は `update` の `ServiceControl` を継承して実装する。自動更新が常駐のユニットを再起動するためである。
 - `dashboard` は `steamvr` の repository（オーバーレイの部分）、`config` の usecase、`power_off` の型だけを参照する。常駐の部品には `main.cr` が渡す Proc を通して触れる。
