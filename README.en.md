@@ -91,6 +91,7 @@ Everything is restored when either controller reconnects.
 It is disabled by default.
 To use it, turn on "Save power when both are off" in the "Vibration & power" tab.
 To lower the screen brightness as well, also turn on "Lower the brightness" in the same tab. This is also off by default.
+Brightness fades down over about 2 seconds and comes back in about 0.5 seconds. "Brightness fade time" changes how long it takes; 0 switches instantly.
 
 ## Updating
 

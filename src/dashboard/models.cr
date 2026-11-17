@@ -81,6 +81,7 @@ module Dashboard
       "power_save.brightness"          => Field.new("power_save.brightness", FieldKind::Toggle),
       "power_save.brightness_gain"     => Field.new("power_save.brightness_gain", FieldKind::Stepper, 0.05, 0.05, 3.0),
       "power_save.performance_profile" => Field.new("power_save.performance_profile", FieldKind::Toggle),
+      "power_save.fade_ms"             => Field.new("power_save.fade_ms", FieldKind::Stepper, 500.0, 0.0, 10_000.0),
       "update.auto_update"             => Field.new("update.auto_update", FieldKind::Toggle),
       "update.check_interval_h"        => Field.new("update.check_interval_h", FieldKind::Stepper, 1.0, 1.0, 168.0),
       "language"                       => Field.new("language", FieldKind::Choice),
@@ -146,6 +147,8 @@ module Dashboard
         next_root.feedback.amplitude = round(step(root.feedback.amplitude, field, direction))
       when "power_save.delay_s"
         next_root.power_save.delay_s = step(root.power_save.delay_s, field, direction).to_i
+      when "power_save.fade_ms"
+        next_root.power_save.fade_ms = step(root.power_save.fade_ms, field, direction).to_i
       when "power_save.brightness_gain"
         next_root.power_save.brightness_gain = step_gain(root.power_save.brightness_gain, field, direction, gain_range)
       end

@@ -102,6 +102,15 @@ describe Dashboard::Editor do
     apply(Config::Root.default, "language", -1).language.should eq Runtime::I18n::CODES.last
   end
 
+  it "明るさを変える時間は 500ms ずつ動き、0 から 10000 を出ない" do
+    root = Config::Root.default
+    apply(root, "power_save.fade_ms", 1).power_save.fade_ms.should eq 2500
+    root.power_save.fade_ms = 0
+    apply(root, "power_save.fade_ms", -1).power_save.fade_ms.should eq 0
+    root.power_save.fade_ms = 10_000
+    apply(root, "power_save.fade_ms", 1).power_save.fade_ms.should eq 10_000
+  end
+
   describe "明るさ" do
     it "HMD の最小値から上げると最小値の 1 段上になる" do
       root = Config::Root.default
