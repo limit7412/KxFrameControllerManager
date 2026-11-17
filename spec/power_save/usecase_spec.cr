@@ -25,10 +25,20 @@ private def settle(usecase : PowerSave::Usecase) : Nil
   end
 end
 
+# 省電力中の 27062 の確認のファイバが終わるまで待つ。
+private def poll(usecase : PowerSave::Usecase) : Nil
+  5.times do
+    Fiber.yield
+    sleep 1.millisecond
+  end
+end
+
 private def enter(usecase : PowerSave::Usecase, base = Time.instant) : Nil
   usecase.tick(false, base)
   usecase.tick(false, base + 10.seconds)
   settle(usecase)
+  # 入った後の初めの拍。省電力中の 27062 の確認は、ここから間を数える。
+  usecase.tick(false, base + 10.seconds)
 end
 
 describe PowerSave::Usecase do
@@ -183,5 +193,86 @@ describe PowerSave::Usecase do
 
     usecase.active?.should be_false
     settings.writes.should be_empty
+  end
+
+  it "省電力中に 27062 で接続中のものが現れたら、OpenVR の報告を待たずに戻す" do
+    usecase, settings, store, link = build
+    base = Time.instant
+    enter(usecase, base)
+    usecase.active?.should be_true
+
+    link.list_result = PowerOff::ControllerList.new([PowerOff::LinkedController.new("aaaaaaaaaaaa")])
+    usecase.tick(false, base + 13.seconds)
+    poll(usecase)
+    usecase.tick(false, base + 13.seconds)
+
+    usecase.active?.should be_false
+    settings.floats["steamvr/analogGain"].should eq 1.3
+    settings.strings["steamvr/performanceProfile"].should eq "Performance"
+    store.saved.should be_nil
+  end
+
+  it "省電力中の 27062 の確認は間を空ける" do
+    usecase, _, _, link = build
+    base = Time.instant
+    enter(usecase, base)
+    count = link.list_count
+
+    # 入った直後は見に行かない。入る直前に見たばかりである。
+    usecase.tick(false, base + 10.seconds)
+    poll(usecase)
+    link.list_count.should eq count
+
+    usecase.tick(false, base + 13.seconds)
+    poll(usecase)
+    usecase.tick(false, base + 13.seconds)
+    poll(usecase)
+    link.list_count.should eq count + 1
+    usecase.active?.should be_true
+  end
+
+  it "省電力中に 27062 の一覧を取れなくても、省電力のままにする" do
+    usecase, settings, _, link = build
+    base = Time.instant
+    enter(usecase, base)
+    link.list_result = nil
+    usecase.tick(false, base + 13.seconds)
+    poll(usecase)
+    usecase.tick(false, base + 13.seconds)
+
+    usecase.active?.should be_true
+    settings.floats["steamvr/analogGain"].should eq 0.4
+  end
+
+  it "27062 で戻った後、OpenVR の報告が遅れていても入り直さない" do
+    usecase, settings, _, link = build
+    base = Time.instant
+    enter(usecase, base)
+    link.list_result = PowerOff::ControllerList.new([PowerOff::LinkedController.new("aaaaaaaaaaaa")])
+    usecase.tick(false, base + 13.seconds)
+    poll(usecase)
+    usecase.tick(false, base + 13.seconds)
+    usecase.active?.should be_false
+
+    usecase.tick(false, base + 14.seconds)
+    usecase.tick(false, base + 24.seconds)
+    settle(usecase)
+    usecase.active?.should be_false
+    settings.floats["steamvr/analogGain"].should eq 1.3
+  end
+
+  it "27062 を見ている間に shutdown したら、その結果では戻さない" do
+    usecase, settings, _, link = build
+    base = Time.instant
+    enter(usecase, base)
+    link.list_result = PowerOff::ControllerList.new([PowerOff::LinkedController.new("aaaaaaaaaaaa")])
+    usecase.tick(false, base + 13.seconds)
+    usecase.shutdown
+    writes = settings.writes.size
+    poll(usecase)
+    usecase.tick(false, base + 13.seconds)
+
+    usecase.state.should eq PowerSave::Usecase::State::Waiting
+    settings.writes.size.should eq writes
   end
 end
