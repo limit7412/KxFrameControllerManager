@@ -19,6 +19,27 @@ module PowerOff
     end
   end
 
+  # 常駐が長押しを検出できる状態か。
+  enum Detection
+    # 設定 power_off.enabled で無効にしてある。
+    Disabled
+    # 常駐が SteamVR へつながっていない。
+    NotConnected
+    # つながったが、この接続ではまだアクションを読ませようとしていない。
+    Pending
+    # アクションを読ませてあり、長押しを検出できる。
+    Ready
+    # アクションを読ませられず、間隔を空けてやり直している。
+    Failed
+    # この SteamVR では SteamVR Input を使えない。
+    Unavailable
+
+    # 長押しを有効にしてあり SteamVR へもつながっているのに、検出できない状態か。
+    def broken? : Bool
+      failed? || unavailable?
+    end
+  end
+
   # 27062 の一覧に載っている、接続中のコントローラー 1 台（仕様書 4.3 節）。
   struct LinkedController
     # 27062 側のシリアル。OpenVR のシリアルから先頭の「cv.」を外した形である。
